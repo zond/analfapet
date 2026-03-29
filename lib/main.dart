@@ -6,14 +6,17 @@ import 'models/game_state.dart';
 import 'screens/friends_screen.dart';
 import 'screens/game_screen.dart';
 import 'services/dictionary.dart';
+import 'services/fcm_service.dart';
 import 'services/player_identity.dart';
 
 final playerIdentity = PlayerIdentity();
+final fcmService = FcmService();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await playerIdentity.init();
+  await fcmService.init(playerIdentity.uuid);
   runApp(const AnalfapetApp());
 }
 

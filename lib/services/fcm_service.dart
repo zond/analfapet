@@ -8,7 +8,9 @@ class FcmService {
 
   Future<void> init(String playerId) async {
     await _messaging.requestPermission();
-    final token = await _messaging.getToken();
+    final token = await _messaging.getToken(
+      vapidKey: 'BADlJWLuNnXTe6VG4fCEhz-NdXSh5zElySUYFcJoOSRO8Hzs8MDNM_mN1FGb8TJvEZ5T26bKHA_f5irGG74m0tU',
+    );
     if (token != null) {
       await _registerToken(playerId, token);
     }
