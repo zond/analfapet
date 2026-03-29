@@ -71,7 +71,10 @@ class _BoardWidgetState extends State<BoardWidget> {
             },
             onLeave: (_) => setState(() => _hoverCell = null),
             builder: (context, candidateData, rejectedData) {
-              return Stack(
+              return SizedBox(
+                width: size,
+                height: size,
+                child: Stack(
                 children: [
                   GestureDetector(
                     onTapUp: widget.onCellTap == null
@@ -120,6 +123,7 @@ class _BoardWidgetState extends State<BoardWidget> {
                         ),
                       ),
                 ],
+              ),
               );
             },
           );
