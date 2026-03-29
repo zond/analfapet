@@ -21,6 +21,7 @@ jobs:
 
       - name: Download wordlist
         run: |
+          mkdir -p assets
           curl -fsSL "https://github.com/axki/saol-wordlist/raw/refs/heads/master/output/saol_wordlist.txt" | gzip > assets/wordlist.txt.gz
 
       - uses: subosito/flutter-action@v2
