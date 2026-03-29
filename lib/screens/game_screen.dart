@@ -23,7 +23,6 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> {
-  int? _selectedTileIndex;
   final List<TilePlacement> _pendingPlacements = [];
   late final MoveValidator _validator;
 
@@ -35,38 +34,28 @@ class _GameScreenState extends State<GameScreen> {
     _validator = MoveValidator(widget.dictionary);
   }
 
-  void _onTileTap(int index) {
-    setState(() {
-      _selectedTileIndex = _selectedTileIndex == index ? null : index;
-    });
-  }
-
-  void _onCellTap(int row, int col) {
-    if (_selectedTileIndex == null) {
-      // Check if tapping a pending placement to remove it
-      final existingIndex = _pendingPlacements.indexWhere(
-          (p) => p.row == row && p.col == col);
-      if (existingIndex >= 0) {
-        setState(() {
-          final removed = _pendingPlacements.removeAt(existingIndex);
-          game.localRack.add(removed.placedTile.tile);
-        });
-      }
-      return;
-    }
-
+  void _onTileDrop(int row, int col, Tile tile) {
     if (!game.board.isEmpty(row, col)) return;
     if (_pendingPlacements.any((p) => p.row == row && p.col == col)) return;
-
-    final tile = game.localRack[_selectedTileIndex!];
 
     if (tile.letter == '*') {
       _showBlankLetterPicker(row, col, tile);
     } else {
       setState(() {
         _pendingPlacements.add(TilePlacement(row, col, PlacedTile(tile)));
-        game.localRack.removeAt(_selectedTileIndex!);
-        _selectedTileIndex = null;
+        game.localRack.remove(tile);
+      });
+    }
+  }
+
+  void _onCellTap(int row, int col) {
+    // Tap a pending placement to return it to rack
+    final existingIndex =
+        _pendingPlacements.indexWhere((p) => p.row == row && p.col == col);
+    if (existingIndex >= 0) {
+      setState(() {
+        final removed = _pendingPlacements.removeAt(existingIndex);
+        game.localRack.add(removed.placedTile.tile);
       });
     }
   }
@@ -90,7 +79,9 @@ class _GameScreenState extends State<GameScreen> {
                   color: const Color(0xFFE8D5B7),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Text(letter, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text(letter,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             );
           }).toList(),
@@ -102,8 +93,7 @@ class _GameScreenState extends State<GameScreen> {
           _pendingPlacements.add(
             TilePlacement(row, col, PlacedTile(tile, blankLetter: letter)),
           );
-          game.localRack.removeAt(_selectedTileIndex!);
-          _selectedTileIndex = null;
+          game.localRack.remove(tile);
         });
       }
     });
@@ -119,7 +109,8 @@ class _GameScreenState extends State<GameScreen> {
 
   void _submitMove() {
     final isFirstMove = game.turnSeqNr == 0;
-    final result = _validator.validate(game.board, _pendingPlacements, isFirstMove);
+    final result =
+        _validator.validate(game.board, _pendingPlacements, isFirstMove);
 
     if (!result.valid) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,7 +120,6 @@ class _GameScreenState extends State<GameScreen> {
     }
 
     setState(() {
-      // Apply placements to the real board
       for (final p in _pendingPlacements) {
         game.board.set(p.row, p.col, p.placedTile);
       }
@@ -139,12 +129,12 @@ class _GameScreenState extends State<GameScreen> {
       game.localPlayerTurn = false;
       game.consecutivePasses = 0;
       _pendingPlacements.clear();
-      _selectedTileIndex = null;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${result.wordsFormed.join(", ")} — ${result.score} points!'),
+        content: Text(
+            '${result.wordsFormed.join(", ")} — ${result.score} points!'),
       ),
     );
 
@@ -157,7 +147,6 @@ class _GameScreenState extends State<GameScreen> {
         game.localRack.add(p.placedTile.tile);
       }
       _pendingPlacements.clear();
-      _selectedTileIndex = null;
     });
   }
 
@@ -167,14 +156,15 @@ class _GameScreenState extends State<GameScreen> {
       game.localPlayerTurn = false;
       game.consecutivePasses++;
       _pendingPlacements.clear();
-      _selectedTileIndex = null;
     });
     // TODO: send pass via FCM
   }
 
   @override
   Widget build(BuildContext context) {
-    final pendingPositions = {for (final p in _pendingPlacements) (p.row, p.col)};
+    final pendingPositions = {
+      for (final p in _pendingPlacements) (p.row, p.col)
+    };
 
     return Scaffold(
       backgroundColor: const Color(0xFF1B5E20),
@@ -188,7 +178,8 @@ class _GameScreenState extends State<GameScreen> {
             child: Center(
               child: Text(
                 '${game.scores[0]} – ${game.scores[1]}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -203,19 +194,23 @@ class _GameScreenState extends State<GameScreen> {
               children: [
                 Text(
                   'Tiles left: ${game.bag.length}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style:
+                      const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 Text(
                   game.localPlayerTurn ? 'Your turn' : 'Waiting...',
                   style: TextStyle(
-                    color: game.localPlayerTurn ? Colors.greenAccent : Colors.white54,
+                    color: game.localPlayerTurn
+                        ? Colors.greenAccent
+                        : Colors.white54,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
                   'Turn ${game.turnSeqNr + 1}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style:
+                      const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
             ),
@@ -226,6 +221,7 @@ class _GameScreenState extends State<GameScreen> {
               child: BoardWidget(
                 board: _boardWithPending,
                 pendingPlacements: pendingPositions,
+                onTileDrop: game.localPlayerTurn ? _onTileDrop : null,
                 onCellTap: game.localPlayerTurn ? _onCellTap : null,
               ),
             ),
@@ -233,8 +229,7 @@ class _GameScreenState extends State<GameScreen> {
           const SizedBox(height: 8),
           TileRackWidget(
             tiles: game.localRack,
-            selectedIndex: _selectedTileIndex,
-            onTileTap: game.localPlayerTurn ? _onTileTap : null,
+            enabled: game.localPlayerTurn,
           ),
           const SizedBox(height: 8),
           if (game.localPlayerTurn)
@@ -244,12 +239,14 @@ class _GameScreenState extends State<GameScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: _pendingPlacements.isNotEmpty ? _recallTiles : null,
+                    onPressed:
+                        _pendingPlacements.isNotEmpty ? _recallTiles : null,
                     icon: const Icon(Icons.undo),
                     label: const Text('Recall'),
                   ),
                   ElevatedButton.icon(
-                    onPressed: _pendingPlacements.isNotEmpty ? _submitMove : null,
+                    onPressed:
+                        _pendingPlacements.isNotEmpty ? _submitMove : null,
                     icon: const Icon(Icons.check),
                     label: const Text('Play'),
                     style: ElevatedButton.styleFrom(

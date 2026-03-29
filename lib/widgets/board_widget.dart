@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import '../models/board.dart';
+import '../models/tile.dart';
 
 class BoardWidget extends StatelessWidget {
   final Board board;
   final Set<(int, int)> pendingPlacements;
+  final void Function(int row, int col, Tile tile)? onTileDrop;
   final void Function(int row, int col)? onCellTap;
 
   const BoardWidget({
     super.key,
     required this.board,
     this.pendingPlacements = const {},
+    this.onTileDrop,
     this.onCellTap,
   });
 
@@ -20,18 +23,27 @@ class BoardWidget extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final cellSize = constraints.maxWidth / Board.size;
-          return GestureDetector(
-            onTapUp: onCellTap == null
-                ? null
-                : (details) {
-                    final col = (details.localPosition.dx / cellSize).floor().clamp(0, Board.size - 1);
-                    final row = (details.localPosition.dy / cellSize).floor().clamp(0, Board.size - 1);
-                    onCellTap!(row, col);
-                  },
-            child: CustomPaint(
-              size: Size(constraints.maxWidth, constraints.maxWidth),
-              painter: _BoardPainter(board, pendingPlacements),
+          return GridView.builder(
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: Board.size,
             ),
+            itemCount: Board.size * Board.size,
+            itemBuilder: (context, index) {
+              final row = index ~/ Board.size;
+              final col = index % Board.size;
+              return _BoardCell(
+                row: row,
+                col: col,
+                cellSize: cellSize,
+                tile: board.get(row, col),
+                isPending: pendingPlacements.contains((row, col)),
+                bonus: Board.getBonus(row, col),
+                isCenter: row == 7 && col == 7,
+                onTileDrop: onTileDrop,
+                onTap: onCellTap != null ? () => onCellTap!(row, col) : null,
+              );
+            },
           );
         },
       ),
@@ -39,96 +51,148 @@ class BoardWidget extends StatelessWidget {
   }
 }
 
-class _BoardPainter extends CustomPainter {
-  final Board board;
-  final Set<(int, int)> pendingPlacements;
+class _BoardCell extends StatelessWidget {
+  final int row;
+  final int col;
+  final double cellSize;
+  final PlacedTile? tile;
+  final bool isPending;
+  final CellBonus bonus;
+  final bool isCenter;
+  final void Function(int row, int col, Tile tile)? onTileDrop;
+  final VoidCallback? onTap;
 
-  _BoardPainter(this.board, this.pendingPlacements);
+  const _BoardCell({
+    required this.row,
+    required this.col,
+    required this.cellSize,
+    required this.tile,
+    required this.isPending,
+    required this.bonus,
+    required this.isCenter,
+    this.onTileDrop,
+    this.onTap,
+  });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final cellSize = size.width / Board.size;
+  Widget build(BuildContext context) {
+    Widget cell = Container(
+      decoration: BoxDecoration(
+        color: _backgroundColor,
+        border: Border.all(color: const Color(0xFF5D4037), width: 0.5),
+      ),
+      child: tile != null
+          ? _TileContent(tile: tile!, cellSize: cellSize)
+          : _EmptyContent(bonus: bonus, isCenter: isCenter, cellSize: cellSize),
+    );
 
-    for (var r = 0; r < Board.size; r++) {
-      for (var c = 0; c < Board.size; c++) {
-        final rect = Rect.fromLTWH(c * cellSize, r * cellSize, cellSize, cellSize);
-        final tile = board.get(r, c);
+    if (isPending && onTap != null) {
+      cell = GestureDetector(onTap: onTap, child: cell);
+    }
 
-        if (tile != null) {
-          // Placed tile
-          final isPending = pendingPlacements.contains((r, c));
-          final paint = Paint()
-            ..color = isPending ? const Color(0xFFFFD54F) : const Color(0xFFE8D5B7);
-          canvas.drawRect(rect, paint);
-
-          _drawText(canvas, rect, tile.displayLetter, cellSize * 0.55, Colors.black87);
-          _drawText(
-            canvas,
-            Rect.fromLTWH(rect.left + cellSize * 0.55, rect.top + cellSize * 0.55, cellSize * 0.4, cellSize * 0.4),
-            '${tile.points}',
-            cellSize * 0.25,
-            Colors.black54,
-          );
-        } else {
-          // Empty cell with bonus
-          final bonus = Board.getBonus(r, c);
-          final paint = Paint()..color = _bonusColor(bonus);
-          canvas.drawRect(rect, paint);
-
-          if (bonus != CellBonus.none) {
-            _drawText(canvas, rect, _bonusLabel(bonus), cellSize * 0.2, Colors.white70);
+    if (onTileDrop != null && tile == null) {
+      cell = DragTarget<Tile>(
+        onWillAcceptWithDetails: (_) => true,
+        onAcceptWithDetails: (details) => onTileDrop!(row, col, details.data),
+        builder: (context, candidateData, rejectedData) {
+          if (candidateData.isNotEmpty) {
+            return Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                border: Border.all(color: const Color(0xFF5D4037), width: 0.5),
+              ),
+              child: _EmptyContent(bonus: bonus, isCenter: isCenter, cellSize: cellSize),
+            );
           }
-        }
-
-        // Grid lines
-        final borderPaint = Paint()
-          ..color = const Color(0xFF5D4037)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.5;
-        canvas.drawRect(rect, borderPaint);
-      }
+          return cell;
+        },
+      );
     }
 
-    // Center star
-    if (board.isEmpty(7, 7)) {
-      final center = Rect.fromLTWH(7 * cellSize, 7 * cellSize, cellSize, cellSize);
-      _drawText(canvas, center, '\u2605', cellSize * 0.5, Colors.white70);
-    }
+    return cell;
   }
 
-  void _drawText(Canvas canvas, Rect rect, String text, double fontSize, Color color) {
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.bold),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    textPainter.paint(
-      canvas,
-      Offset(
-        rect.left + (rect.width - textPainter.width) / 2,
-        rect.top + (rect.height - textPainter.height) / 2,
+  Color get _backgroundColor {
+    if (tile != null) {
+      return isPending ? const Color(0xFFFFD54F) : const Color(0xFFE8D5B7);
+    }
+    return switch (bonus) {
+      CellBonus.doubleLetter => const Color(0xFF64B5F6),
+      CellBonus.tripleLetter => const Color(0xFF1565C0),
+      CellBonus.doubleWord => const Color(0xFFEF9A9A),
+      CellBonus.tripleWord => const Color(0xFFC62828),
+      CellBonus.none => const Color(0xFF2E7D32),
+    };
+  }
+}
+
+class _TileContent extends StatelessWidget {
+  final PlacedTile tile;
+  final double cellSize;
+
+  const _TileContent({required this.tile, required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Center(
+          child: Text(
+            tile.displayLetter,
+            style: TextStyle(
+              fontSize: cellSize * 0.55,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xDD000000),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 1,
+          bottom: 0,
+          child: Text(
+            '${tile.points}',
+            style: TextStyle(
+              fontSize: cellSize * 0.25,
+              color: const Color(0x8A000000),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmptyContent extends StatelessWidget {
+  final CellBonus bonus;
+  final bool isCenter;
+  final double cellSize;
+
+  const _EmptyContent({required this.bonus, required this.isCenter, required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCenter) {
+      return Center(
+        child: Text(
+          '\u2605',
+          style: TextStyle(fontSize: cellSize * 0.5, color: Colors.white70),
+        ),
+      );
+    }
+    if (bonus == CellBonus.none) return const SizedBox.shrink();
+    final label = switch (bonus) {
+      CellBonus.doubleLetter => 'DL',
+      CellBonus.tripleLetter => 'TL',
+      CellBonus.doubleWord => 'DW',
+      CellBonus.tripleWord => 'TW',
+      CellBonus.none => '',
+    };
+    return Center(
+      child: Text(
+        label,
+        style: TextStyle(fontSize: cellSize * 0.2, color: Colors.white70, fontWeight: FontWeight.bold),
       ),
     );
   }
-
-  Color _bonusColor(CellBonus bonus) => switch (bonus) {
-        CellBonus.doubleLetter => const Color(0xFF64B5F6),
-        CellBonus.tripleLetter => const Color(0xFF1565C0),
-        CellBonus.doubleWord => const Color(0xFFEF9A9A),
-        CellBonus.tripleWord => const Color(0xFFC62828),
-        CellBonus.none => const Color(0xFF2E7D32),
-      };
-
-  String _bonusLabel(CellBonus bonus) => switch (bonus) {
-        CellBonus.doubleLetter => 'DL',
-        CellBonus.tripleLetter => 'TL',
-        CellBonus.doubleWord => 'DW',
-        CellBonus.tripleWord => 'TW',
-        CellBonus.none => '',
-      };
-
-  @override
-  bool shouldRepaint(covariant _BoardPainter oldDelegate) => true;
 }
