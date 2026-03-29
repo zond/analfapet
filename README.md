@@ -17,10 +17,10 @@ Player identity is a locally generated UUID. The only server-side state is a Fir
 
 ### Wordlist
 
-The wordlist is not included in the repository. Download [`saol_wordlist.txt`](https://github.com/axki/saol-wordlist/raw/refs/heads/master/output/saol_wordlist.txt) from [axki/saol-wordlist](https://github.com/axki/saol-wordlist/tree/master/output), gzip it, and place it in the assets directory:
+The wordlist is not included in the repository. Download [`saol_wordlist.txt`](https://github.com/axki/saol-wordlist/raw/refs/heads/master/output/saol_wordlist.txt) from [axki/saol-wordlist](https://github.com/axki/saol-wordlist/tree/master/output) and place it in the assets directory:
 
 ```bash
-curl -fsSL "https://github.com/axki/saol-wordlist/raw/refs/heads/master/output/saol_wordlist.txt" | gzip > assets/wordlist.txt.gz
+curl -fsSL -o assets/wordlist.txt "https://github.com/axki/saol-wordlist/raw/refs/heads/master/output/saol_wordlist.txt"
 ```
 
 ### Firebase

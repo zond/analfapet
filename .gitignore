@@ -45,4 +45,4 @@ app.*.map.json
 /android/app/release
 
 # Wordlist (download separately, see README)
-assets/wordlist.txt.gz
+assets/wordlist.txt
