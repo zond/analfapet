@@ -146,6 +146,12 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
+  void _shuffleRack() {
+    setState(() {
+      game.currentRack.shuffle();
+    });
+  }
+
   void _pass() {
     setState(() {
       game.consecutivePasses++;
@@ -226,11 +232,18 @@ class _GameScreenState extends State<GameScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                ElevatedButton.icon(
+                IconButton(
+                  onPressed: _shuffleRack,
+                  icon: const Icon(Icons.shuffle),
+                  tooltip: 'Shuffle rack',
+                  color: Colors.white70,
+                ),
+                IconButton(
                   onPressed:
                       _pendingPlacements.isNotEmpty ? _recallTiles : null,
                   icon: const Icon(Icons.undo),
-                  label: const Text('Recall'),
+                  tooltip: 'Recall tiles',
+                  color: Colors.white70,
                 ),
                 ElevatedButton.icon(
                   onPressed:
@@ -242,10 +255,11 @@ class _GameScreenState extends State<GameScreen> {
                     foregroundColor: Colors.white,
                   ),
                 ),
-                ElevatedButton.icon(
+                IconButton(
                   onPressed: _pass,
                   icon: const Icon(Icons.skip_next),
-                  label: const Text('Pass'),
+                  tooltip: 'Pass',
+                  color: Colors.white70,
                 ),
               ],
             ),
