@@ -23,28 +23,28 @@ class BoardWidget extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final cellSize = constraints.maxWidth / Board.size;
-          return GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: Board.size,
-            ),
-            itemCount: Board.size * Board.size,
-            itemBuilder: (context, index) {
-              final row = index ~/ Board.size;
-              final col = index % Board.size;
-              return _BoardCell(
-                row: row,
-                col: col,
-                cellSize: cellSize,
-                tile: board.get(row, col),
-                isPending: pendingPlacements.contains((row, col)),
-                bonus: Board.getBonus(row, col),
-                isCenter: row == 7 && col == 7,
-                onTileDrop: onTileDrop,
-                onTap: onCellTap != null ? () => onCellTap!(row, col) : null,
+          return Column(
+            children: List.generate(Board.size, (row) {
+              return Row(
+                children: List.generate(Board.size, (col) {
+                  return SizedBox(
+                    width: cellSize,
+                    height: cellSize,
+                    child: _BoardCell(
+                      row: row,
+                      col: col,
+                      cellSize: cellSize,
+                      tile: board.get(row, col),
+                      isPending: pendingPlacements.contains((row, col)),
+                      bonus: Board.getBonus(row, col),
+                      isCenter: row == 7 && col == 7,
+                      onTileDrop: onTileDrop,
+                      onTap: onCellTap != null ? () => onCellTap!(row, col) : null,
+                    ),
+                  );
+                }),
               );
-            },
+            }),
           );
         },
       ),
