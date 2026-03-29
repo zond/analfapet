@@ -24,6 +24,7 @@ class BoardWidget extends StatelessWidget {
         builder: (context, constraints) {
           final cellSize = constraints.maxWidth / Board.size;
           return GridView.builder(
+            shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: Board.size,
