@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import '../models/tile.dart';
+import 'board_widget.dart';
 
 class TileRackWidget extends StatelessWidget {
   final List<Tile> tiles;
   final bool enabled;
+  final void Function(Tile tile)? onTileReturnedToRack;
 
   const TileRackWidget({
     super.key,
     required this.tiles,
     this.enabled = true,
+    this.onTileReturnedToRack,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    Widget rack = Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(tiles.length, (i) {
         final tile = tiles[i];
@@ -41,6 +44,35 @@ class TileRackWidget extends StatelessWidget {
         );
       }),
     );
+
+    if (onTileReturnedToRack != null) {
+      rack = DragTarget<Object>(
+        onWillAcceptWithDetails: (details) {
+          // Only accept tiles dragged from the board
+          return details.data is BoardTileDrag;
+        },
+        onAcceptWithDetails: (details) {
+          if (details.data is BoardTileDrag) {
+            onTileReturnedToRack!((details.data as BoardTileDrag).tile);
+          }
+        },
+        builder: (context, candidateData, rejectedData) {
+          if (candidateData.isNotEmpty) {
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: const Color(0x304CAF50),
+              ),
+              child: rack,
+            );
+          }
+          return rack;
+        },
+      );
+    }
+
+    return rack;
   }
 }
 

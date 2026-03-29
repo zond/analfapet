@@ -1,30 +1,27 @@
-import 'dart:convert';
 import 'package:flutter/services.dart';
 
 class Dictionary {
-  late final Set<String> _words;
+  final Set<String> _words = {};
+  bool _loaded = false;
 
   Future<void> load() async {
-    final data = await rootBundle.load('assets/wordlist.txt');
-    final bytes = data.buffer.asUint8List();
-    final words = <String>{};
+    final text = await rootBundle.loadString('assets/wordlist.txt');
     var start = 0;
-    for (var i = 0; i < bytes.length; i++) {
-      if (bytes[i] == 0x0A) { // newline
-        if (i > start) {
-          final word = utf8.decode(bytes.sublist(start, i)).trim().toUpperCase();
-          if (word.isNotEmpty) words.add(word);
+    while (start < text.length) {
+      var end = text.indexOf('\n', start);
+      if (end == -1) end = text.length;
+      if (end > start) {
+        final word = text.substring(start, end).trim();
+        if (word.isNotEmpty && word.length <= 15) {
+          _words.add(word.toUpperCase());
         }
-        start = i + 1;
       }
+      start = end + 1;
     }
-    // last line without trailing newline
-    if (start < bytes.length) {
-      final word = utf8.decode(bytes.sublist(start)).trim().toUpperCase();
-      if (word.isNotEmpty) words.add(word);
-    }
-    _words = words;
+    _loaded = true;
   }
+
+  bool get isLoaded => _loaded;
 
   bool isValid(String word) => _words.contains(word.toUpperCase());
 

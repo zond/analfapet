@@ -25,6 +25,7 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   final List<TilePlacement> _pendingPlacements = [];
   late final MoveValidator _validator;
+  bool _handover = false;
 
   GameState get game => widget.gameState;
 
@@ -46,6 +47,22 @@ class _GameScreenState extends State<GameScreen> {
         game.currentRack.remove(tile);
       });
     }
+  }
+
+  void _onPendingTilePickedUp(int row, int col) {
+    setState(() {
+      final idx = _pendingPlacements.indexWhere((p) => p.row == row && p.col == col);
+      if (idx >= 0) {
+        _pendingPlacements.removeAt(idx);
+        // Don't add back to rack — it's now being dragged
+      }
+    });
+  }
+
+  void _onTileReturnedToRack(Tile tile) {
+    setState(() {
+      game.currentRack.add(tile);
+    });
   }
 
   void _onCellTap(int row, int col) {
@@ -106,6 +123,14 @@ class _GameScreenState extends State<GameScreen> {
     return tempBoard;
   }
 
+  void _endTurn() {
+    setState(() {
+      _pendingPlacements.clear();
+      game.nextTurn();
+      _handover = true;
+    });
+  }
+
   void _submitMove() {
     final isFirstMove = game.turnSeqNr == 0;
     final result =
@@ -118,16 +143,12 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
 
-    setState(() {
-      for (final p in _pendingPlacements) {
-        game.board.set(p.row, p.col, p.placedTile);
-      }
-      game.scores[game.currentPlayer] += result.score;
-      game.drawTiles(game.currentRack, _pendingPlacements.length);
-      game.consecutivePasses = 0;
-      _pendingPlacements.clear();
-      game.nextTurn();
-    });
+    for (final p in _pendingPlacements) {
+      game.board.set(p.row, p.col, p.placedTile);
+    }
+    game.scores[game.currentPlayer] += result.score;
+    game.drawTiles(game.currentRack, _pendingPlacements.length);
+    game.consecutivePasses = 0;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -135,6 +156,8 @@ class _GameScreenState extends State<GameScreen> {
             '${result.wordsFormed.join(", ")} — ${result.score} points!'),
       ),
     );
+
+    _endTurn();
   }
 
   void _recallTiles() {
@@ -153,11 +176,8 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _pass() {
-    setState(() {
-      game.consecutivePasses++;
-      _pendingPlacements.clear();
-      game.nextTurn();
-    });
+    game.consecutivePasses++;
+    _endTurn();
   }
 
   String get _scoreText {
@@ -170,6 +190,43 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_handover) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF1B5E20),
+        body: GestureDetector(
+          onTap: () => setState(() => _handover = false),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  game.currentPlayerName,
+                  style: const TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _scoreText,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    color: Colors.white70,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'Tap to start your turn',
+                  style: TextStyle(color: Colors.white54, fontSize: 18),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final pendingPositions = {
       for (final p in _pendingPlacements) (p.row, p.col)
     };
@@ -220,12 +277,16 @@ class _GameScreenState extends State<GameScreen> {
                 board: _boardWithPending,
                 pendingPlacements: pendingPositions,
                 onTileDrop: _onTileDrop,
+                onPendingTilePickedUp: _onPendingTilePickedUp,
                 onCellTap: _onCellTap,
               ),
             ),
           ),
           const SizedBox(height: 8),
-          TileRackWidget(tiles: game.currentRack),
+          TileRackWidget(
+            tiles: game.currentRack,
+            onTileReturnedToRack: _onTileReturnedToRack,
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
