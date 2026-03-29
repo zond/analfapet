@@ -4,30 +4,26 @@ import 'tile.dart';
 
 class GameState {
   final String gameId;
-  final String localPlayerId;
-  final String remotePlayerId;
+  final int playerCount;
   final Board board;
   final List<Tile> bag;
-  final List<Tile> localRack;
-  final List<Tile> remoteRack;
-  final List<int> scores; // [local, remote]
+  final List<List<Tile>> racks;
+  final List<int> scores;
   int turnSeqNr;
-  bool localPlayerTurn;
+  int currentPlayer; // 0-indexed
   int consecutivePasses;
   bool gameOver;
   final SeededPRNG prng;
 
   GameState({
     required this.gameId,
-    required this.localPlayerId,
-    required this.remotePlayerId,
+    required this.playerCount,
     required this.board,
     required this.bag,
-    required this.localRack,
-    required this.remoteRack,
+    required this.racks,
     required this.scores,
     required this.turnSeqNr,
-    required this.localPlayerTurn,
+    required this.currentPlayer,
     this.consecutivePasses = 0,
     this.gameOver = false,
     required this.prng,
@@ -35,51 +31,43 @@ class GameState {
 
   factory GameState.newGame({
     required String gameId,
-    required String localPlayerId,
-    required String remotePlayerId,
+    required int playerCount,
     required int seed,
-    required bool localGoesFirst,
   }) {
     final prng = SeededPRNG(seed);
     final bag = Tile.createBag();
     _shuffleBag(bag, prng);
 
-    final localRack = <Tile>[];
-    final remoteRack = <Tile>[];
-
-    // Draw 7 tiles each; first player draws first
-    if (localGoesFirst) {
+    final racks = <List<Tile>>[];
+    for (var p = 0; p < playerCount; p++) {
+      final rack = <Tile>[];
       for (var i = 0; i < 7; i++) {
-        localRack.add(bag.removeLast());
+        rack.add(bag.removeLast());
       }
-      for (var i = 0; i < 7; i++) {
-        remoteRack.add(bag.removeLast());
-      }
-    } else {
-      for (var i = 0; i < 7; i++) {
-        remoteRack.add(bag.removeLast());
-      }
-      for (var i = 0; i < 7; i++) {
-        localRack.add(bag.removeLast());
-      }
+      racks.add(rack);
     }
 
     return GameState(
       gameId: gameId,
-      localPlayerId: localPlayerId,
-      remotePlayerId: remotePlayerId,
+      playerCount: playerCount,
       board: Board(),
       bag: bag,
-      localRack: localRack,
-      remoteRack: remoteRack,
-      scores: [0, 0],
+      racks: racks,
+      scores: List.filled(playerCount, 0),
       turnSeqNr: 0,
-      localPlayerTurn: localGoesFirst,
+      currentPlayer: 0,
       prng: prng,
     );
   }
 
-  List<Tile> get currentRack => localPlayerTurn ? localRack : remoteRack;
+  List<Tile> get currentRack => racks[currentPlayer];
+
+  String get currentPlayerName => 'Player ${currentPlayer + 1}';
+
+  void nextTurn() {
+    turnSeqNr++;
+    currentPlayer = (currentPlayer + 1) % playerCount;
+  }
 
   void drawTiles(List<Tile> rack, int count) {
     final toDraw = min(count, bag.length);

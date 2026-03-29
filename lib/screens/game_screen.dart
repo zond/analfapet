@@ -43,19 +43,18 @@ class _GameScreenState extends State<GameScreen> {
     } else {
       setState(() {
         _pendingPlacements.add(TilePlacement(row, col, PlacedTile(tile)));
-        game.localRack.remove(tile);
+        game.currentRack.remove(tile);
       });
     }
   }
 
   void _onCellTap(int row, int col) {
-    // Tap a pending placement to return it to rack
     final existingIndex =
         _pendingPlacements.indexWhere((p) => p.row == row && p.col == col);
     if (existingIndex >= 0) {
       setState(() {
         final removed = _pendingPlacements.removeAt(existingIndex);
-        game.localRack.add(removed.placedTile.tile);
+        game.currentRack.add(removed.placedTile.tile);
       });
     }
   }
@@ -93,7 +92,7 @@ class _GameScreenState extends State<GameScreen> {
           _pendingPlacements.add(
             TilePlacement(row, col, PlacedTile(tile, blankLetter: letter)),
           );
-          game.localRack.remove(tile);
+          game.currentRack.remove(tile);
         });
       }
     });
@@ -123,12 +122,11 @@ class _GameScreenState extends State<GameScreen> {
       for (final p in _pendingPlacements) {
         game.board.set(p.row, p.col, p.placedTile);
       }
-      game.scores[0] += result.score;
-      game.drawTiles(game.localRack, _pendingPlacements.length);
-      game.turnSeqNr++;
-      game.localPlayerTurn = false;
+      game.scores[game.currentPlayer] += result.score;
+      game.drawTiles(game.currentRack, _pendingPlacements.length);
       game.consecutivePasses = 0;
       _pendingPlacements.clear();
+      game.nextTurn();
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -137,14 +135,12 @@ class _GameScreenState extends State<GameScreen> {
             '${result.wordsFormed.join(", ")} — ${result.score} points!'),
       ),
     );
-
-    // TODO: send move via FCM
   }
 
   void _recallTiles() {
     setState(() {
       for (final p in _pendingPlacements) {
-        game.localRack.add(p.placedTile.tile);
+        game.currentRack.add(p.placedTile.tile);
       }
       _pendingPlacements.clear();
     });
@@ -152,12 +148,18 @@ class _GameScreenState extends State<GameScreen> {
 
   void _pass() {
     setState(() {
-      game.turnSeqNr++;
-      game.localPlayerTurn = false;
       game.consecutivePasses++;
       _pendingPlacements.clear();
+      game.nextTurn();
     });
-    // TODO: send pass via FCM
+  }
+
+  String get _scoreText {
+    final parts = <String>[];
+    for (var i = 0; i < game.playerCount; i++) {
+      parts.add('P${i + 1}: ${game.scores[i]}');
+    }
+    return parts.join('  ');
   }
 
   @override
@@ -169,7 +171,7 @@ class _GameScreenState extends State<GameScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1B5E20),
       appBar: AppBar(
-        title: const Text('Analfapet'),
+        title: Text(game.currentPlayerName),
         backgroundColor: const Color(0xFF2E7D32),
         foregroundColor: Colors.white,
         actions: [
@@ -177,9 +179,9 @@ class _GameScreenState extends State<GameScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Center(
               child: Text(
-                '${game.scores[0]} – ${game.scores[1]}',
+                _scoreText,
                 style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
+                    fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -198,16 +200,6 @@ class _GameScreenState extends State<GameScreen> {
                       const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 Text(
-                  game.localPlayerTurn ? 'Your turn' : 'Waiting...',
-                  style: TextStyle(
-                    color: game.localPlayerTurn
-                        ? Colors.greenAccent
-                        : Colors.white54,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
                   'Turn ${game.turnSeqNr + 1}',
                   style:
                       const TextStyle(color: Colors.white70, fontSize: 13),
@@ -221,55 +213,43 @@ class _GameScreenState extends State<GameScreen> {
               child: BoardWidget(
                 board: _boardWithPending,
                 pendingPlacements: pendingPositions,
-                onTileDrop: game.localPlayerTurn ? _onTileDrop : null,
-                onCellTap: game.localPlayerTurn ? _onCellTap : null,
+                onTileDrop: _onTileDrop,
+                onCellTap: _onCellTap,
               ),
             ),
           ),
           const SizedBox(height: 8),
-          TileRackWidget(
-            tiles: game.localRack,
-            enabled: game.localPlayerTurn,
-          ),
+          TileRackWidget(tiles: game.currentRack),
           const SizedBox(height: 8),
-          if (game.localPlayerTurn)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed:
-                        _pendingPlacements.isNotEmpty ? _recallTiles : null,
-                    icon: const Icon(Icons.undo),
-                    label: const Text('Recall'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed:
+                      _pendingPlacements.isNotEmpty ? _recallTiles : null,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Recall'),
+                ),
+                ElevatedButton.icon(
+                  onPressed:
+                      _pendingPlacements.isNotEmpty ? _submitMove : null,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Play'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
                   ),
-                  ElevatedButton.icon(
-                    onPressed:
-                        _pendingPlacements.isNotEmpty ? _submitMove : null,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Play'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _pass,
-                    icon: const Icon(Icons.skip_next),
-                    label: const Text('Pass'),
-                  ),
-                ],
-              ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _pass,
+                  icon: const Icon(Icons.skip_next),
+                  label: const Text('Pass'),
+                ),
+              ],
             ),
-          if (!game.localPlayerTurn)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 16),
-              child: Text(
-                'Waiting for opponent...',
-                style: TextStyle(color: Colors.white54, fontSize: 16),
-              ),
-            ),
+          ),
         ],
       ),
     );

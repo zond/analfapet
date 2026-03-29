@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'firebase_options.dart';
 import 'models/game_state.dart';
+import 'screens/friends_screen.dart';
 import 'screens/game_screen.dart';
 import 'services/dictionary.dart';
 
@@ -63,21 +64,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _startLocalGame() {
-    final seed = Random().nextInt(0xFFFFFFFF);
-    final game = GameState.newGame(
-      gameId: 'local-${DateTime.now().millisecondsSinceEpoch}',
-      localPlayerId: 'player1',
-      remotePlayerId: 'player2',
-      seed: seed,
-      localGoesFirst: true,
-    );
-
+  void _openLocalGame() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => GameScreen(gameState: game, dictionary: _dictionary!),
+        builder: (_) => _PlayerCountScreen(dictionary: _dictionary!),
       ),
+    );
+  }
+
+  void _openFriends() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FriendsScreen()),
     );
   }
 
@@ -115,27 +114,106 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: const TextStyle(color: Colors.white54),
                       ),
                       const SizedBox(height: 48),
-                      ElevatedButton.icon(
-                        onPressed: _startLocalGame,
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Local game'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                          textStyle: const TextStyle(fontSize: 18),
-                        ),
+                      _MenuButton(
+                        onPressed: _openLocalGame,
+                        icon: Icons.people,
+                        label: 'Local game',
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: null, // TODO: implement online play
-                        icon: const Icon(Icons.wifi),
-                        label: const Text('Online game'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                          textStyle: const TextStyle(fontSize: 18),
-                        ),
+                      const SizedBox(height: 12),
+                      _MenuButton(
+                        onPressed: null, // TODO: implement
+                        icon: Icons.wifi,
+                        label: 'Remote game',
+                      ),
+                      const SizedBox(height: 12),
+                      _MenuButton(
+                        onPressed: _openFriends,
+                        icon: Icons.group,
+                        label: 'Friends',
                       ),
                     ],
                   ),
+      ),
+    );
+  }
+}
+
+class _MenuButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final String label;
+
+  const _MenuButton({required this.onPressed, required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        textStyle: const TextStyle(fontSize: 18),
+        minimumSize: const Size(220, 0),
+      ),
+    );
+  }
+}
+
+class _PlayerCountScreen extends StatelessWidget {
+  final Dictionary dictionary;
+
+  const _PlayerCountScreen({required this.dictionary});
+
+  void _start(BuildContext context, int playerCount) {
+    final seed = Random().nextInt(0xFFFFFFFF);
+    final game = GameState.newGame(
+      gameId: 'local-${DateTime.now().millisecondsSinceEpoch}',
+      playerCount: playerCount,
+      seed: seed,
+    );
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GameScreen(gameState: game, dictionary: dictionary),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1B5E20),
+      appBar: AppBar(
+        title: const Text('Local game'),
+        backgroundColor: const Color(0xFF2E7D32),
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'How many players?',
+              style: TextStyle(color: Colors.white70, fontSize: 20),
+            ),
+            const SizedBox(height: 32),
+            for (var n = 2; n <= 4; n++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: ElevatedButton(
+                  onPressed: () => _start(context, n),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                    textStyle: const TextStyle(fontSize: 18),
+                    minimumSize: const Size(220, 0),
+                  ),
+                  child: Text('$n players'),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
