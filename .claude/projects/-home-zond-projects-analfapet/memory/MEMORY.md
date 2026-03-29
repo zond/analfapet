@@ -1,0 +1,2 @@
+- [Firebase project](project_firebase.md) — shared "fcm-switch" project used as FCM relay across multiple apps
+- [Platform target](project_platform.md) — web app, no NFC, friend sharing via QR or UUID only

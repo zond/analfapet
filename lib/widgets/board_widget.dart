@@ -1,40 +1,25 @@
 import 'package:flutter/material.dart';
 import '../models/board.dart';
-import '../models/tile.dart';
-import 'tile_rack_widget.dart';
 
-/// Data for a tile being dragged from the board.
-class BoardTileDrag {
-  final Tile tile;
-  final int fromRow;
-  final int fromCol;
-
-  const BoardTileDrag(this.tile, this.fromRow, this.fromCol);
-}
-
-class BoardWidget extends StatefulWidget {
+class BoardWidget extends StatelessWidget {
   final Board board;
   final Set<(int, int)> pendingPlacements;
-  final void Function(int row, int col, Tile tile)? onTileDrop;
-  final void Function(int row, int col)? onPendingTilePickedUp;
   final void Function(int row, int col)? onCellTap;
 
   const BoardWidget({
     super.key,
     required this.board,
     this.pendingPlacements = const {},
-    this.onTileDrop,
-    this.onPendingTilePickedUp,
     this.onCellTap,
   });
 
-  @override
-  State<BoardWidget> createState() => _BoardWidgetState();
-}
-
-class _BoardWidgetState extends State<BoardWidget> {
-  (int, int)? _hoverCell;
-  (int, int)? _draggingFrom;
+  /// Convert a local position to (row, col), given the widget's width.
+  static (int, int) positionToCell(Offset local, double boardSize) {
+    final cellSize = boardSize / Board.size;
+    final col = (local.dx / cellSize).floor().clamp(0, Board.size - 1);
+    final row = (local.dy / cellSize).floor().clamp(0, Board.size - 1);
+    return (row, col);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,88 +29,18 @@ class _BoardWidgetState extends State<BoardWidget> {
         builder: (context, constraints) {
           final size = constraints.maxWidth;
           final cellSize = size / Board.size;
-
-          return DragTarget<Object>(
-            onWillAcceptWithDetails: (_) => true,
-            onAcceptWithDetails: (details) {
-              if (widget.onTileDrop == null) return;
-              final box = context.findRenderObject() as RenderBox;
-              final local = box.globalToLocal(details.offset);
-              final col = (local.dx / cellSize).floor().clamp(0, Board.size - 1);
-              final row = (local.dy / cellSize).floor().clamp(0, Board.size - 1);
-              final data = details.data;
-              if (data is Tile) {
-                widget.onTileDrop!(row, col, data);
-              } else if (data is BoardTileDrag) {
-                widget.onTileDrop!(row, col, data.tile);
-              }
-              setState(() => _hoverCell = null);
-            },
-            onMove: (details) {
-              final box = context.findRenderObject() as RenderBox;
-              final local = box.globalToLocal(details.offset);
-              final col = (local.dx / cellSize).floor().clamp(0, Board.size - 1);
-              final row = (local.dy / cellSize).floor().clamp(0, Board.size - 1);
-              final cell = (row, col);
-              if (_hoverCell != cell) setState(() => _hoverCell = cell);
-            },
-            onLeave: (_) => setState(() => _hoverCell = null),
-            builder: (context, candidateData, rejectedData) {
-              return SizedBox(
-                width: size,
-                height: size,
-                child: Stack(
-                children: [
-                  GestureDetector(
-                    onTapUp: widget.onCellTap == null
-                        ? null
-                        : (details) {
-                            final col = (details.localPosition.dx / cellSize).floor().clamp(0, Board.size - 1);
-                            final row = (details.localPosition.dy / cellSize).floor().clamp(0, Board.size - 1);
-                            widget.onCellTap!(row, col);
-                          },
-                    child: CustomPaint(
-                      size: Size(size, size),
-                      painter: _BoardPainter(
-                        widget.board,
-                        widget.pendingPlacements,
-                        _draggingFrom,
-                        candidateData.isNotEmpty ? _hoverCell : null,
-                      ),
-                    ),
-                  ),
-                  // Overlay draggable widgets on pending placements
-                  for (final (r, c) in widget.pendingPlacements)
-                    if (widget.board.get(r, c) != null)
-                      Positioned(
-                        left: c * cellSize,
-                        top: r * cellSize,
-                        width: cellSize,
-                        height: cellSize,
-                        child: Draggable<BoardTileDrag>(
-                          data: BoardTileDrag(widget.board.get(r, c)!.tile, r, c),
-                          onDragStarted: () {
-                            widget.onPendingTilePickedUp?.call(r, c);
-                            setState(() => _draggingFrom = (r, c));
-                          },
-                          onDragEnd: (_) => setState(() => _draggingFrom = null),
-                          onDraggableCanceled: (_, _) => setState(() => _draggingFrom = null),
-                          feedback: Material(
-                            color: Colors.transparent,
-                            child: TileWidget(
-                              tile: widget.board.get(r, c)!.tile,
-                              size: cellSize * 1.2,
-                              dragging: true,
-                            ),
-                          ),
-                          childWhenDragging: const SizedBox.shrink(),
-                          child: const SizedBox.expand(), // transparent hit area
-                        ),
-                      ),
-                ],
-              ),
-              );
-            },
+          return GestureDetector(
+            onTapUp: onCellTap == null
+                ? null
+                : (details) {
+                    final col = (details.localPosition.dx / cellSize).floor().clamp(0, Board.size - 1);
+                    final row = (details.localPosition.dy / cellSize).floor().clamp(0, Board.size - 1);
+                    onCellTap!(row, col);
+                  },
+            child: CustomPaint(
+              size: Size(size, size),
+              painter: _BoardPainter(board, pendingPlacements),
+            ),
           );
         },
       ),
@@ -136,10 +51,8 @@ class _BoardWidgetState extends State<BoardWidget> {
 class _BoardPainter extends CustomPainter {
   final Board board;
   final Set<(int, int)> pendingPlacements;
-  final (int, int)? draggingFrom;
-  final (int, int)? hoverCell;
 
-  _BoardPainter(this.board, this.pendingPlacements, this.draggingFrom, this.hoverCell);
+  _BoardPainter(this.board, this.pendingPlacements);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -149,9 +62,8 @@ class _BoardPainter extends CustomPainter {
       for (var c = 0; c < Board.size; c++) {
         final rect = Rect.fromLTWH(c * cellSize, r * cellSize, cellSize, cellSize);
         final tile = board.get(r, c);
-        final isDragging = draggingFrom == (r, c);
 
-        if (tile != null && !isDragging) {
+        if (tile != null) {
           final isPending = pendingPlacements.contains((r, c));
           canvas.drawRect(rect, Paint()..color = isPending ? const Color(0xFFFFD54F) : const Color(0xFFE8D5B7));
           _drawText(canvas, rect, tile.displayLetter, cellSize * 0.55, Colors.black87);
@@ -162,8 +74,6 @@ class _BoardPainter extends CustomPainter {
             cellSize * 0.25,
             Colors.black54,
           );
-        } else if (hoverCell == (r, c)) {
-          canvas.drawRect(rect, Paint()..color = const Color(0x804CAF50));
         } else {
           final bonus = Board.getBonus(r, c);
           canvas.drawRect(rect, Paint()..color = _bonusColor(bonus));
@@ -182,7 +92,7 @@ class _BoardPainter extends CustomPainter {
       }
     }
 
-    if (board.isEmpty(7, 7) && hoverCell != (7, 7)) {
+    if (board.isEmpty(7, 7)) {
       final center = Rect.fromLTWH(7 * cellSize, 7 * cellSize, cellSize, cellSize);
       _drawText(canvas, center, '\u2605', cellSize * 0.5, Colors.white70);
     }
@@ -213,5 +123,6 @@ class _BoardPainter extends CustomPainter {
       };
 
   @override
-  bool shouldRepaint(covariant _BoardPainter old) => true;
+  bool shouldRepaint(covariant _BoardPainter old) =>
+      old.board != board || old.pendingPlacements != pendingPlacements;
 }
