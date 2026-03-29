@@ -1,0 +1,28 @@
+name: analfapet
+description: "Swedish word game"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^3.12.1
+  firebase_messaging: ^15.2.4
+  cloud_firestore: ^5.6.5
+  uuid: ^4.5.1
+  shared_preferences: ^2.3.4
+  qr_flutter: ^4.1.0
+  crypto: ^3.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
