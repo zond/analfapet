@@ -6,10 +6,14 @@ import 'models/game_state.dart';
 import 'screens/friends_screen.dart';
 import 'screens/game_screen.dart';
 import 'services/dictionary.dart';
+import 'services/player_identity.dart';
+
+final playerIdentity = PlayerIdentity();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await playerIdentity.init();
   runApp(const AnalfapetApp());
 }
 
@@ -76,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openFriends() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const FriendsScreen()),
+      MaterialPageRoute(builder: (_) => FriendsScreen(playerId: playerIdentity.uuid)),
     );
   }
 
