@@ -237,6 +237,7 @@ class _GameScreenState extends State<GameScreen> {
       return Scaffold(
         backgroundColor: const Color(0xFF1B5E20),
         body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => setState(() => _handover = false),
           child: Center(
             child: Column(
