@@ -107,22 +107,6 @@ class _FriendsScreenState extends State<FriendsScreen> {
                 backgroundColor: Colors.white,
               ),
             ),
-            const SizedBox(height: 12),
-            SelectableText(
-              _identity.uuid,
-              style: const TextStyle(fontSize: 12, color: Colors.white54),
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: _identity.uuid));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('ID copied')),
-                );
-              },
-              icon: const Icon(Icons.copy, size: 16),
-              label: const Text('Copy ID'),
-            ),
           ],
         ),
         actions: [
