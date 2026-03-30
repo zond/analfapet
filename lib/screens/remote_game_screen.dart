@@ -29,11 +29,13 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
   @override
   void initState() {
     super.initState();
+    widget.controller.currentViewingGameId = widget.gameId;
     widget.controller.addListener(_onChanged);
   }
 
   @override
   void dispose() {
+    widget.controller.currentViewingGameId = null;
     widget.controller.removeListener(_onChanged);
     super.dispose();
   }

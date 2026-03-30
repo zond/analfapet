@@ -33,6 +33,9 @@ class RemoteGameController extends ChangeNotifier {
   List<RemoteGame> get finishedGames =>
       _games.where((g) => g.status == RemoteGameStatus.finished).toList();
 
+  /// The game ID currently being viewed by the user (set by RemoteGameScreen).
+  String? currentViewingGameId;
+
   /// Check if an active game is actually finished via gameplay (game over).
   bool isGameOverViaGameplay(RemoteGame game) {
     if (game.status != RemoteGameStatus.active) return false;
@@ -373,9 +376,9 @@ class RemoteGameController extends ChangeNotifier {
       await sendGameState(gameId);
     }
 
-    // If nothing changed, it's a nudge — show it
+    // If nothing changed, it's a nudge — only show if viewing that game
     if (!anythingChanged && !movesRejected) {
-      if (game.status == RemoteGameStatus.active) {
+      if (game.status == RemoteGameStatus.active && currentViewingGameId == gameId) {
         return '$senderName sent a nudge';
       }
       return null;
