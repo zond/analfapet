@@ -253,10 +253,11 @@ class RemoteGameController extends ChangeNotifier {
     bool anythingChanged = false;
     final wasActive = game.status == RemoteGameStatus.active;
 
-    // If incoming has all-accepted players, adopt their list directly
-    // (it's sorted by UUID from finalization — authoritative order)
+    // If incoming has all-accepted players and game isn't active yet,
+    // adopt their list (sorted by UUID from finalization).
+    // Never modify the player list of an active game — it would corrupt move replay.
     final allIncomingAccepted = incomingPlayers.every((p) => p.accepted || p.denied);
-    if (allIncomingAccepted && incomingPlayers.length >= 2) {
+    if (allIncomingAccepted && incomingPlayers.length >= 2 && game.status != RemoteGameStatus.active) {
       // Check if player list differs from ours
       final incomingUuids = incomingPlayers.where((p) => p.accepted).map((p) => p.uuid).toList();
       final localUuids = game.players.map((p) => p.uuid).toList();
