@@ -88,9 +88,10 @@ class MoveValidator {
       }
     }
 
-    // Find and validate all words formed
+    // Find all words formed
     final newTilePositions = {for (final p in placements) (p.row, p.col)};
     final words = <String>[];
+    final invalidWords = <String>[];
     var totalScore = 0;
 
     // Get the main word
@@ -100,10 +101,11 @@ class MoveValidator {
 
     if (mainWord != null && mainWord.word.length > 1) {
       if (!dictionary.isValid(mainWord.word)) {
-        return MoveValidationResult(valid: false, error: '"${mainWord.word}" is not a valid word');
+        invalidWords.add(mainWord.word);
+      } else {
+        words.add(mainWord.word);
+        totalScore += _scoreWord(tempBoard, mainWord, newTilePositions);
       }
-      words.add(mainWord.word);
-      totalScore += _scoreWord(tempBoard, mainWord, newTilePositions);
     }
 
     // Get cross words
@@ -114,11 +116,20 @@ class MoveValidator {
 
       if (crossWord != null && crossWord.word.length > 1) {
         if (!dictionary.isValid(crossWord.word)) {
-          return MoveValidationResult(valid: false, error: '"${crossWord.word}" is not a valid word');
+          invalidWords.add(crossWord.word);
+        } else {
+          words.add(crossWord.word);
+          totalScore += _scoreWord(tempBoard, crossWord, newTilePositions);
         }
-        words.add(crossWord.word);
-        totalScore += _scoreWord(tempBoard, crossWord, newTilePositions);
       }
+    }
+
+    if (invalidWords.isNotEmpty) {
+      final quoted = invalidWords.map((w) => '"$w"').join(', ');
+      return MoveValidationResult(
+        valid: false,
+        error: '$quoted — not valid',
+      );
     }
 
     if (words.isEmpty) {
