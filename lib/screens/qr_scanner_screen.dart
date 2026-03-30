@@ -51,22 +51,19 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 
   void _startScanning() {
-    if (!_hasBarcodeDetector()) {
+    if (!_jsHasBarcodeDetector()) {
       setState(() => _error = 'QR scanning not supported in this browser. Try Chrome.');
       return;
     }
     _scanTimer = Timer.periodic(const Duration(milliseconds: 500), (_) => _scan());
   }
 
-  bool _hasBarcodeDetector() {
-    return _checkBarcodeDetector();
-  }
-
   Future<void> _scan() async {
     if (!_scanning) return;
     try {
-      final result = await _detectQR(_video);
-      if (result != null && mounted) {
+      final jsResult = await _jsDetectQR(_video).toDart;
+      if (jsResult != null && mounted) {
+        final result = (jsResult as JSString).toDart;
         _scanning = false;
         Navigator.pop(context, result);
       }
@@ -122,33 +119,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 }
 
-@JS('window.BarcodeDetector')
-external JSFunction? get _barcodeDetectorCtor;
+// -- JS interop: thin wrappers around helpers defined in index.html --
 
-bool _checkBarcodeDetector() => _barcodeDetectorCtor != null;
+@JS('_analfapetHasBarcodeDetector')
+external bool _jsHasBarcodeDetector();
 
-Future<String?> _detectQR(web.HTMLVideoElement video) async {
-  final options = {'formats': <String>['qr_code'].map((s) => s.toJS).toList().toJS}.jsify()!;
-  final detector = _newBarcodeDetector(options);
-  final promise = detector.callMethod('detect'.toJS, video as JSObject) as JSPromise<JSArray<JSObject>>;
-  final results = await promise.toDart;
-  final list = results.toDart;
-  if (list.isEmpty) return null;
-  final rawValue = list.first.getProperty('rawValue'.toJS);
-  if (rawValue == null) return null;
-  return (rawValue as JSString).toDart;
-}
-
-@JS('BarcodeDetector')
-@staticInterop
-class _BarcodeDetectorJS {
-  external factory _BarcodeDetectorJS(JSAny options);
-}
-
-JSObject _newBarcodeDetector(JSAny options) =>
-    _BarcodeDetectorJS(options) as JSObject;
-
-extension on JSObject {
-  external JSAny? callMethod(JSAny method, [JSAny? arg1]);
-  external JSAny? getProperty(JSAny name);
-}
+@JS('_analfapetDetectQR')
+external JSPromise<JSAny?> _jsDetectQR(web.HTMLVideoElement video);
