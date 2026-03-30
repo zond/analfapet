@@ -626,6 +626,13 @@ class _GameScreenState extends State<GameScreen> {
                           ? Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
+                                IconButton(
+                                  onPressed: _shuffleRack,
+                                  icon: const Icon(Icons.shuffle),
+                                  tooltip: 'Shuffle rack',
+                                  color: Colors.white70,
+                                ),
+                                const SizedBox(width: 8),
                                 Text(
                                   'Waiting for ${_playerName(game.currentPlayer)}...',
                                   style: const TextStyle(color: Colors.white54, fontSize: 16),
