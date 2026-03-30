@@ -84,15 +84,34 @@
       return firebase.messaging().getToken({ vapidKey: vapidKey, serviceWorkerRegistration: swReg });
     };
     window._analfapetHasBarcodeDetector = function() {
-      return typeof BarcodeDetector !== 'undefined';
+      return true; // always available via canvas fallback
     };
     window._analfapetDetectQR = async function(videoElement) {
-      const detector = new BarcodeDetector({formats: ['qr_code']});
-      const results = await detector.detect(videoElement);
-      if (results.length > 0) return results[0].rawValue;
+      // Try native BarcodeDetector first (Chrome Android)
+      if (typeof BarcodeDetector !== 'undefined') {
+        try {
+          const detector = new BarcodeDetector({formats: ['qr_code']});
+          const results = await detector.detect(videoElement);
+          if (results.length > 0) return results[0].rawValue;
+          return null;
+        } catch(e) {}
+      }
+      // Fallback: capture frame to canvas and use jsQR
+      if (!window._jsQR) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = videoElement.videoWidth;
+      canvas.height = videoElement.videoHeight;
+      if (canvas.width === 0 || canvas.height === 0) return null;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = window._jsQR(imageData.data, imageData.width, imageData.height);
+      if (code) return code.data;
       return null;
     };
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script>window._jsQR = jsQR;</script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
