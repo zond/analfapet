@@ -46,3 +46,4 @@ app.*.map.json
 
 # Wordlist (download separately, see README)
 assets/wordlist.txt
+.claude/
