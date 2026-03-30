@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/fcm_message.dart';
+import '../models/game_state.dart';
 import '../models/move.dart';
 import '../models/remote_game.dart';
 import 'fcm_service.dart';
