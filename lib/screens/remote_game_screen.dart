@@ -97,11 +97,22 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
       moves: game.moves,
     );
 
+    // Determine last move and who played it
+    Move? lastMove;
+    int? lastMovePlayerIndex;
+    if (game.moves.isNotEmpty) {
+      lastMove = game.moves.last;
+      // The player who made the last move is the one before the current player
+      lastMovePlayerIndex = (gameState.currentPlayer - 1 + game.players.length) % game.players.length;
+    }
+
     return GameScreen(
       gameState: gameState,
       dictionary: widget.dictionary,
       localPlayerIndex: localPlayerIndex,
       playerNames: playerNames,
+      lastMove: lastMove,
+      lastMovePlayerIndex: lastMovePlayerIndex,
       onMoveSubmitted: (move) async {
         await widget.controller.sendMove(game.gameId, move);
       },

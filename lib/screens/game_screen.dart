@@ -18,6 +18,11 @@ class GameScreen extends StatefulWidget {
   final Future<void> Function(Move move)? onMoveSubmitted;
   final VoidCallback? onHurry;
 
+  /// Last move played (for highlighting and info display)
+  final Move? lastMove;
+  /// Who played the last move
+  final int? lastMovePlayerIndex;
+
   const GameScreen({
     super.key,
     required this.gameState,
@@ -26,6 +31,8 @@ class GameScreen extends StatefulWidget {
     this.playerNames,
     this.onMoveSubmitted,
     this.onHurry,
+    this.lastMove,
+    this.lastMovePlayerIndex,
   });
 
   bool get isRemote => localPlayerIndex != null;
@@ -38,6 +45,8 @@ class _GameScreenState extends State<GameScreen> {
   final List<TilePlacement> _pendingPlacements = [];
   late final MoveValidator _validator;
   bool _handover = false;
+  Move? _lastLocalMove;
+  int? _lastLocalMovePlayer;
 
   // Drag state
   Tile? _dragTile;
@@ -50,11 +59,14 @@ class _GameScreenState extends State<GameScreen> {
   bool get isRemote => widget.isRemote;
   bool get isMyTurn => isRemote
       ? game.currentPlayer == widget.localPlayerIndex
-      : true; // local mode: always your turn (handover handles switching)
+      : true;
 
   List<Tile> get _myRack => isRemote
       ? game.racks[widget.localPlayerIndex!]
       : game.currentRack;
+
+  Move? get _lastMove => isRemote ? widget.lastMove : _lastLocalMove;
+  int? get _lastMovePlayer => isRemote ? widget.lastMovePlayerIndex : _lastLocalMovePlayer;
 
   String _playerName(int index) {
     if (widget.playerNames != null && index < widget.playerNames!.length) {
@@ -210,7 +222,6 @@ class _GameScreenState extends State<GameScreen> {
     );
 
     if (isRemote) {
-      // Apply locally and send via controller
       game.applyMove(move);
       setState(() => _pendingPlacements.clear());
 
@@ -220,7 +231,7 @@ class _GameScreenState extends State<GameScreen> {
 
       widget.onMoveSubmitted?.call(move);
     } else {
-      // Local mode
+      final player = game.currentPlayer;
       for (final p in _pendingPlacements) {
         game.board.set(p.row, p.col, p.placedTile);
       }
@@ -233,6 +244,8 @@ class _GameScreenState extends State<GameScreen> {
       );
 
       setState(() {
+        _lastLocalMove = move;
+        _lastLocalMovePlayer = player;
         _pendingPlacements.clear();
         game.nextTurn();
         _handover = true;
@@ -252,13 +265,112 @@ class _GameScreenState extends State<GameScreen> {
       setState(() => _pendingPlacements.clear());
       widget.onMoveSubmitted?.call(move);
     } else {
+      final player = game.currentPlayer;
       game.consecutivePasses++;
       setState(() {
+        _lastLocalMove = move;
+        _lastLocalMovePlayer = player;
         _pendingPlacements.clear();
         game.nextTurn();
         _handover = true;
       });
     }
+  }
+
+  void _swapTiles() {
+    // Show dialog to select tiles to swap
+    final toSwap = <int>{};
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Select tiles to swap'),
+          content: Wrap(
+            spacing: 4,
+            children: List.generate(_myRack.length, (i) {
+              final tile = _myRack[i];
+              final selected = toSwap.contains(i);
+              return GestureDetector(
+                onTap: () => setDialogState(() {
+                  if (selected) {
+                    toSwap.remove(i);
+                  } else {
+                    toSwap.add(i);
+                  }
+                }),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: selected ? const Color(0xFFFFD54F) : const Color(0xFFE8D5B7),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: selected ? Colors.orange : const Color(0xFF5D4037),
+                      width: selected ? 2 : 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      tile.letter == '*' ? ' ' : tile.letter,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF3E2723)),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: toSwap.isEmpty ? null : () => Navigator.pop(context, toSwap),
+              child: const Text('Swap'),
+            ),
+          ],
+        ),
+      ),
+    ).then((result) {
+      if (result == null || result is! Set<int>) return;
+      if (game.bag.length < result.length) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not enough tiles in the bag')),
+        );
+        return;
+      }
+
+      setState(() {
+        // Return selected tiles to bag and draw new ones
+        final indices = result.toList()..sort((a, b) => b.compareTo(a)); // reverse order
+        final returned = <Tile>[];
+        for (final i in indices) {
+          returned.add(_myRack.removeAt(i));
+        }
+        game.bag.addAll(returned);
+        // Shuffle bag deterministically isn't needed for swap — just draw
+        game.drawTiles(_myRack, returned.length);
+      });
+
+      final move = Move(
+        type: MoveType.swap,
+        turnSeqNr: game.turnSeqNr,
+        boardHash: game.board.computeHash(),
+      );
+
+      if (isRemote) {
+        game.applyMove(move);
+        widget.onMoveSubmitted?.call(move);
+      } else {
+        final player = game.currentPlayer;
+        setState(() {
+          _lastLocalMove = move;
+          _lastLocalMovePlayer = player;
+          game.nextTurn();
+          _handover = true;
+        });
+      }
+    });
   }
 
   void _recallTiles() {
@@ -289,6 +401,30 @@ class _GameScreenState extends State<GameScreen> {
       return isMyTurn ? 'Your turn' : '${_playerName(game.currentPlayer)}\'s turn';
     }
     return _playerName(game.currentPlayer);
+  }
+
+  String? get _lastMoveText {
+    final move = _lastMove;
+    final playerIdx = _lastMovePlayer;
+    if (move == null || playerIdx == null) return null;
+    final name = _playerName(playerIdx);
+    switch (move.type) {
+      case MoveType.play:
+        final words = move.placements.map((p) => p.placedTile.displayLetter).join('');
+        return '$name played ${move.score} pts';
+      case MoveType.pass:
+        return '$name passed';
+      case MoveType.swap:
+        return '$name swapped tiles';
+      case MoveType.resign:
+        return '$name resigned';
+    }
+  }
+
+  Set<(int, int)> get _lastMovePositions {
+    final move = _lastMove;
+    if (move == null || move.type != MoveType.play) return {};
+    return {for (final p in move.placements) (p.row, p.col)};
   }
 
   @override
@@ -323,6 +459,7 @@ class _GameScreenState extends State<GameScreen> {
     }
 
     final pendingPositions = {for (final p in _pendingPlacements) (p.row, p.col)};
+    final lastMovePositions = _lastMovePositions;
     final canInteract = isMyTurn && !game.gameOver;
 
     return Listener(
@@ -333,7 +470,15 @@ class _GameScreenState extends State<GameScreen> {
           Scaffold(
             backgroundColor: const Color(0xFF1B5E20),
             appBar: AppBar(
-              title: Text(_turnLabel),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_turnLabel, style: const TextStyle(fontSize: 16)),
+                  if (_lastMoveText != null)
+                    Text(_lastMoveText!,
+                        style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                ],
+              ),
               backgroundColor: const Color(0xFF2E7D32),
               foregroundColor: Colors.white,
               actions: [
@@ -367,6 +512,7 @@ class _GameScreenState extends State<GameScreen> {
                       key: _boardKey,
                       board: _boardWithPending,
                       pendingPlacements: pendingPositions,
+                      lastMovePlacements: lastMovePositions,
                       onCellTap: canInteract ? _onCellTap : null,
                       onPendingDragStart: canInteract ? _onBoardTileDragStart : null,
                     ),
@@ -404,6 +550,12 @@ class _GameScreenState extends State<GameScreen> {
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
                               ),
+                            ),
+                            IconButton(
+                              onPressed: _swapTiles,
+                              icon: const Icon(Icons.swap_horiz),
+                              tooltip: 'Swap tiles',
+                              color: Colors.white70,
                             ),
                             IconButton(
                               onPressed: _pass,
@@ -461,6 +613,7 @@ class _GameScreenState extends State<GameScreen> {
 class _BoardWithDrag extends StatelessWidget {
   final Board board;
   final Set<(int, int)> pendingPlacements;
+  final Set<(int, int)> lastMovePlacements;
   final void Function(int row, int col)? onCellTap;
   final void Function(int row, int col, Offset globalPosition)? onPendingDragStart;
 
@@ -468,6 +621,7 @@ class _BoardWithDrag extends StatelessWidget {
     super.key,
     required this.board,
     this.pendingPlacements = const {},
+    this.lastMovePlacements = const {},
     this.onCellTap,
     this.onPendingDragStart,
   });
@@ -500,7 +654,7 @@ class _BoardWithDrag extends StatelessWidget {
               height: size,
               child: CustomPaint(
                 size: Size(size, size),
-                painter: _SimpleBoardPainter(board, pendingPlacements),
+                painter: _SimpleBoardPainter(board, pendingPlacements, lastMovePlacements),
               ),
             ),
           ),
@@ -513,8 +667,9 @@ class _BoardWithDrag extends StatelessWidget {
 class _SimpleBoardPainter extends CustomPainter {
   final Board board;
   final Set<(int, int)> pendingPlacements;
+  final Set<(int, int)> lastMovePlacements;
 
-  _SimpleBoardPainter(this.board, this.pendingPlacements);
+  _SimpleBoardPainter(this.board, this.pendingPlacements, this.lastMovePlacements);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -527,7 +682,13 @@ class _SimpleBoardPainter extends CustomPainter {
 
         if (tile != null) {
           final isPending = pendingPlacements.contains((r, c));
-          canvas.drawRect(rect, Paint()..color = isPending ? const Color(0xFFFFD54F) : const Color(0xFFE8D5B7));
+          final isLastMove = lastMovePlacements.contains((r, c));
+          final color = isPending
+              ? const Color(0xFFFFD54F) // yellow - your pending
+              : isLastMove
+                  ? const Color(0xFFFFCC80) // orange-ish - opponent's last move
+                  : const Color(0xFFE8D5B7); // normal
+          canvas.drawRect(rect, Paint()..color = color);
           _drawText(canvas, rect, tile.displayLetter, cellSize * 0.55, Colors.black87);
           _drawText(
             canvas,
@@ -581,5 +742,5 @@ class _SimpleBoardPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SimpleBoardPainter old) =>
-      old.board != board || old.pendingPlacements != pendingPlacements;
+      old.board != board || old.pendingPlacements != pendingPlacements || old.lastMovePlacements != lastMovePlacements;
 }
