@@ -305,12 +305,16 @@ class _GameScreenState extends State<GameScreen> {
     );
 
     if (isRemote) {
-      // Re-add pending tiles to rack before applyMove (they were removed during drag)
+      // Re-add pending tiles to the GameState rack before applyMove
+      // (they were removed from _gameRack during drag)
       for (final p in _pendingPlacements) {
-        _myRack.add(p.placedTile.tile);
+        _gameRack.add(p.placedTile.tile);
       }
       game.applyMove(move);
-      setState(() => _pendingPlacements.clear());
+      setState(() {
+        _pendingPlacements.clear();
+        _userRackOrder = null;
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.wordsFormed.join(", ")} — ${result.score} points!')),
@@ -335,6 +339,7 @@ class _GameScreenState extends State<GameScreen> {
         _lastLocalMovePlayer = player;
         _pendingPlacements.clear();
         game.nextTurn();
+        _userRackOrder = null;
         _handover = true;
       });
     }
@@ -365,6 +370,7 @@ class _GameScreenState extends State<GameScreen> {
         if (!game.gameOver) {
           game.nextTurn();
         }
+        _userRackOrder = null;
         _handover = !game.gameOver;
       });
     }
@@ -454,6 +460,7 @@ class _GameScreenState extends State<GameScreen> {
         setState(() {
           _lastLocalMove = move;
           _lastLocalMovePlayer = player;
+          _userRackOrder = null;
           _handover = !game.gameOver;
         });
       }
