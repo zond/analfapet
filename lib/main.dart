@@ -93,7 +93,7 @@ void _checkUrlFragment() {
       final data = (jsonDecode(jsonStr) as Map).cast<String, dynamic>();
       print('[Notification] Opened from URL fragment: ${data['type']}');
       // Clear the fragment so it doesn't trigger again on refresh
-      web.window.history.replaceState(null.toJS, ''.toJS, web.window.location.pathname.toJS);
+      web.window.history.replaceState(''.toJS, '', web.window.location.pathname);
       // Delay slightly to let the navigator initialize
       Future.delayed(const Duration(milliseconds: 500), () {
         _handleNotificationClick(data);
