@@ -6,19 +6,25 @@ class RemotePlayer {
   final String uuid;
   final String name;
   bool accepted;
+  bool denied;
 
-  RemotePlayer({required this.uuid, required this.name, this.accepted = false});
+  /// Status as a byte for binary encoding: 0=pending, 1=accepted, 2=denied.
+  int get status => denied ? 2 : (accepted ? 1 : 0);
+
+  RemotePlayer({required this.uuid, required this.name, this.accepted = false, this.denied = false});
 
   Map<String, dynamic> toJson() => {
         'uuid': uuid,
         'name': name,
         'accepted': accepted,
+        'denied': denied,
       };
 
   factory RemotePlayer.fromJson(Map<String, dynamic> json) => RemotePlayer(
         uuid: json['uuid'] as String,
         name: json['name'] as String,
         accepted: json['accepted'] as bool? ?? false,
+        denied: json['denied'] as bool? ?? false,
       );
 }
 

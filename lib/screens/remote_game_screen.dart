@@ -119,8 +119,7 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
       },
       onHurry: gameState.currentPlayer != localPlayerIndex
           ? () async {
-              final targetUuid = game.players[gameState.currentPlayer].uuid;
-              await widget.controller.sendHurry(game.gameId, targetUuid);
+              await widget.controller.sendGameState(game.gameId);
             }
           : null,
     );

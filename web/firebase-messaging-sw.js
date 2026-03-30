@@ -51,14 +51,15 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const type = payload.data?.type || 'message';
-  const sender = payload.data?.senderName || 'Someone';
+  // Use the human-readable fields 't' (type) and 'n' (name) sent alongside binary data
+  const msgType = payload.data?.t || 'message';
+  const sender = payload.data?.n || 'Someone';
 
   let title = 'Analfapet';
   let body = 'New message';
 
-  switch (type) {
-    case 'friendRequest':
+  switch (msgType) {
+    case 'friend':
       title = 'Friend request';
       body = `${sender} added you as a friend`;
       break;
@@ -70,21 +71,9 @@ messaging.onBackgroundMessage((payload) => {
       title = 'Your turn!';
       body = `${sender} played a move`;
       break;
-    case 'hurry':
-      title = 'Hurry up!';
-      body = `${sender} is waiting for your move`;
-      break;
-    case 'accept':
-      title = 'Game starting';
-      body = `${sender} accepted the invite`;
-      break;
-    case 'deny':
-      title = 'Game cancelled';
-      body = `${sender} declined the invite`;
-      break;
-    case 'stateSync':
-      title = 'Game updated';
-      body = `${sender} synced game state`;
+    default:
+      title = 'Analfapet';
+      body = `Update from ${sender}`;
       break;
   }
 
@@ -106,17 +95,17 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         if (client.url.includes('analfapet') && 'focus' in client) {
           client.focus();
-          // Forward the message data so the app can process it
+          // Forward the full data (including 'd' binary payload) so the app can process it
           if (data) client.postMessage({ type: 'notification-click', data: data });
           return;
         }
       }
       // No existing tab — open a new one with data in the URL fragment
-      // Only encode small fields; skip 'moves' which can be very large for stateSync
+      // Only pass the binary payload and metadata fields
       if (clients.openWindow) {
         let small = {};
         if (data) {
-          const keep = ['type', 'gameId', 'senderId', 'senderName', 'seed', 'playerIds', 'playerNames', 'targetId'];
+          const keep = ['d', 't', 'n'];
           for (const k of keep) {
             if (data[k] !== undefined) small[k] = data[k];
           }

@@ -170,6 +170,11 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 	_, err := msgClient.Send(ctx, &messaging.Message{
 		Token: player.Token,
 		Data:  req.Data,
+		Webpush: &messaging.WebpushConfig{
+			Headers: map[string]string{
+				"Urgency": "high",
+			},
+		},
 	})
 	if err != nil {
 		if messaging.IsRegistrationTokenNotRegistered(err) {

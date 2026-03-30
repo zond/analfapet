@@ -1,13 +1,13 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
-import '../models/fcm_message.dart';
 import '../models/game_state.dart';
 import '../models/move.dart';
 import '../models/remote_game.dart';
 import 'dictionary.dart';
 import 'fcm_service.dart';
 import 'friends_service.dart';
+import 'message_codec.dart';
 import 'move_validator.dart';
 import 'player_identity.dart';
 import 'remote_game_service.dart';
@@ -64,26 +64,6 @@ class RemoteGameController extends ChangeNotifier {
     game.status = RemoteGameStatus.active;
   }
 
-  /// Sync player list from an incoming message.
-  /// If the message includes playerIds, adopt that list (sorted by UUID).
-  void _syncPlayers(RemoteGame game, FcmGameMessage msg) {
-    if (msg.playerIds != null && msg.playerNames != null) {
-      final incoming = <RemotePlayer>[];
-      for (var i = 0; i < msg.playerIds!.length; i++) {
-        incoming.add(RemotePlayer(
-          uuid: msg.playerIds![i],
-          name: msg.playerNames![i],
-          accepted: true,
-        ));
-      }
-      incoming.sort((a, b) => a.uuid.compareTo(b.uuid));
-      game.players
-        ..clear()
-        ..addAll(incoming);
-      game.status = RemoteGameStatus.active;
-    }
-  }
-
   Future<void> _save(RemoteGame game) async {
     game.updatedAt = DateTime.now();
     await storage.save(game);
@@ -91,6 +71,19 @@ class RemoteGameController extends ChangeNotifier {
   }
 
   // --- Outbound ---
+
+  /// Encode the current game state and broadcast to all players.
+  Future<void> sendGameState(String gameId) async {
+    final game = _games.firstWhere((g) => g.gameId == gameId);
+    final base64Data = MessageCodec.encodeGameState(game);
+    final notifType = MessageCodec.notificationType(game, myId);
+    await fcm.broadcast(
+      game.players.map((p) => p.uuid).toList(),
+      myId,
+      base64Data,
+      extra: {'t': notifType, 'n': myName},
+    );
+  }
 
   Future<RemoteGame> createGame(List<Friend> friends) async {
     final gameId = const Uuid().v4();
@@ -114,23 +107,7 @@ class RemoteGameController extends ChangeNotifier {
     }
 
     await _save(game);
-
-    // Invite includes ALL players (not just accepted) so invitees know the full list
-    final msg = FcmGameMessage(
-      type: FcmMessageType.invite,
-      gameId: gameId,
-      senderId: myId,
-      senderName: myName,
-      seed: seed,
-      playerIds: players.map((p) => p.uuid).toList(),
-      playerNames: players.map((p) => p.name).toList(),
-    );
-
-    await fcm.broadcast(
-      players.map((p) => p.uuid).toList(),
-      myId,
-      msg.toJson(),
-    );
+    await sendGameState(gameId);
 
     return game;
   }
@@ -144,39 +121,16 @@ class RemoteGameController extends ChangeNotifier {
       _finalizeGame(game);
     }
     await _save(game);
-
-    // Include all accepted players sorted by UUID so others can sync
-    final accepted = _sortedAccepted(game);
-    final msg = FcmGameMessage(
-      type: FcmMessageType.accept,
-      gameId: gameId,
-      senderId: myId,
-      senderName: myName,
-      playerIds: accepted.map((p) => p.uuid).toList(),
-      playerNames: accepted.map((p) => p.name).toList(),
-    );
-    await fcm.broadcast(
-      game.players.map((p) => p.uuid).toList(),
-      myId,
-      msg.toJson(),
-    );
+    await sendGameState(gameId);
   }
 
   Future<void> denyInvite(String gameId) async {
     final game = _games.firstWhere((g) => g.gameId == gameId);
-
-    final msg = FcmGameMessage(
-      type: FcmMessageType.deny,
-      gameId: gameId,
-      senderId: myId,
-      senderName: myName,
-    );
-    await fcm.broadcast(
-      game.players.map((p) => p.uuid).toList(),
-      myId,
-      msg.toJson(),
-    );
-
+    // Mark self as denied
+    final me = game.players.firstWhere((p) => p.uuid == myId);
+    me.denied = true;
+    me.accepted = false;
+    await sendGameState(gameId);
     await deleteGame(gameId);
   }
 
@@ -184,50 +138,7 @@ class RemoteGameController extends ChangeNotifier {
     final game = _games.firstWhere((g) => g.gameId == gameId);
     game.moves.add(move);
     await _save(game);
-
-    final msg = FcmGameMessage(
-      type: FcmMessageType.move,
-      gameId: gameId,
-      senderId: myId,
-      senderName: myName,
-      move: move,
-      playerIds: game.players.map((p) => p.uuid).toList(),
-      playerNames: game.players.map((p) => p.name).toList(),
-    );
-    await fcm.broadcast(
-      game.players.map((p) => p.uuid).toList(),
-      myId,
-      msg.toJson(),
-    );
-  }
-
-  Future<void> sendHurry(String gameId, String targetId) async {
-    final msg = FcmGameMessage(
-      type: FcmMessageType.hurry,
-      gameId: gameId,
-      senderId: myId,
-      senderName: myName,
-      targetId: targetId,
-    );
-    await fcm.sendToPlayer(targetId, msg.toJson());
-  }
-
-  Future<void> sendStateSync(String gameId) async {
-    final game = _games.firstWhere((g) => g.gameId == gameId);
-    final msg = FcmGameMessage(
-      type: FcmMessageType.stateSync,
-      gameId: gameId,
-      senderId: myId,
-      senderName: myName,
-      moves: game.moves,
-      playerIds: game.players.map((p) => p.uuid).toList(),
-      playerNames: game.players.map((p) => p.name).toList(),
-    );
-    await fcm.broadcast(
-      game.players.map((p) => p.uuid).toList(),
-      myId,
-      msg.toJson(),
-    );
+    await sendGameState(gameId);
   }
 
   Future<void> deleteGame(String gameId) async {
@@ -237,101 +148,184 @@ class RemoteGameController extends ChangeNotifier {
 
   // --- Inbound ---
 
+  /// Handle an incoming decoded message.
   /// Returns a toast message, or null to suppress the toast.
-  Future<String?> handleMessage(Map<String, dynamic> data) async {
-    final msg = FcmGameMessage.fromJson(data);
-    final sender = msg.senderName;
-    switch (msg.type) {
-      case FcmMessageType.invite:
-        await _handleInvite(msg);
-        return '$sender invites you to a game';
-      case FcmMessageType.accept:
-        await _handleAccept(msg);
-        return '$sender accepted the invite';
-      case FcmMessageType.deny:
-        await _handleDeny(msg);
-        return '$sender declined the invite';
-      case FcmMessageType.move:
-        await _handleMove(msg);
-        return '$sender played a move';
-      case FcmMessageType.hurry:
-        return await _handleHurry(msg);
-      case FcmMessageType.stateSync:
-        return await _handleStateSync(msg);
-    }
-  }
+  Future<String?> handleGameMessage(Map<String, dynamic> decoded) async {
+    final gameId = decoded['gameId'] as String;
+    final seed = decoded['seed'] as int;
+    final playersData = decoded['players'] as List<Map<String, dynamic>>;
+    final incomingMoves = decoded['moves'] as List<Move>;
 
-  Future<void> _handleInvite(FcmGameMessage msg) async {
-    // Don't create duplicate
-    if (_games.any((g) => g.gameId == msg.gameId)) return;
+    // Build incoming player list
+    final incomingPlayers = playersData.map((p) => RemotePlayer(
+      uuid: p['uuid'] as String,
+      name: p['name'] as String,
+      accepted: (p['status'] as int) == 1,
+      denied: (p['status'] as int) == 2,
+    )).toList();
 
-    final players = <RemotePlayer>[];
-    for (var i = 0; i < msg.playerIds!.length; i++) {
-      players.add(RemotePlayer(
-        uuid: msg.playerIds![i],
-        name: msg.playerNames![i],
-        accepted: msg.playerIds![i] == msg.senderId, // creator is accepted
-      ));
-    }
+    // Find the sender: the first player whose status differs from what we know,
+    // or just pick the first non-self player as a reasonable guess for toast messages.
+    String senderName = 'Someone';
 
-    final game = RemoteGame(
-      gameId: msg.gameId,
-      seed: msg.seed!,
-      players: players,
-      creatorId: msg.senderId,
-      status: RemoteGameStatus.invited,
+    final existingGame = _games.cast<RemoteGame?>().firstWhere(
+      (g) => g!.gameId == gameId,
+      orElse: () => null,
     );
-    await _save(game);
-  }
 
-  Future<void> _handleAccept(FcmGameMessage msg) async {
-    final game = _games.cast<RemoteGame?>().firstWhere(
-          (g) => g!.gameId == msg.gameId,
-          orElse: () => null,
-        );
-    if (game == null) return;
+    if (existingGame == null) {
+      // New game — this is an invite
+      // The creator is the accepted player (who isn't us)
+      final creator = incomingPlayers.firstWhere(
+        (p) => p.accepted && p.uuid != myId,
+        orElse: () => incomingPlayers.firstWhere((p) => p.uuid != myId),
+      );
+      senderName = creator.name;
 
-    // Mark the sender as accepted
-    final player = game.players.cast<RemotePlayer?>().firstWhere(
-          (p) => p!.uuid == msg.senderId,
-          orElse: () => null,
-        );
-    if (player != null) player.accepted = true;
+      final game = RemoteGame(
+        gameId: gameId,
+        seed: seed,
+        players: incomingPlayers,
+        creatorId: creator.uuid,
+        status: RemoteGameStatus.invited,
+      );
+      await _save(game);
+      return '$senderName invites you to a game';
+    }
 
-    // Also mark any other accepted players from the message
-    // (in case we missed earlier accept FCMs)
-    if (msg.playerIds != null) {
-      for (final id in msg.playerIds!) {
-        final p = game.players.cast<RemotePlayer?>().firstWhere(
-              (p) => p!.uuid == id,
-              orElse: () => null,
-            );
-        if (p != null) p.accepted = true;
+    // Game exists — merge state
+    final game = existingGame;
+
+    // Determine sender by finding what changed
+    senderName = _findSender(game, incomingPlayers, incomingMoves);
+
+    // Update player statuses from incoming
+    for (final incoming in incomingPlayers) {
+      final local = game.players.cast<RemotePlayer?>().firstWhere(
+        (p) => p!.uuid == incoming.uuid,
+        orElse: () => null,
+      );
+      if (local != null) {
+        // Accept trumps pending; denied trumps all
+        if (incoming.denied) {
+          local.denied = true;
+          local.accepted = false;
+        } else if (incoming.accepted && !local.accepted) {
+          local.accepted = true;
+        }
       }
     }
 
-    if (game.allAccepted) {
-      _finalizeGame(game);
+    // Handle denied players: remove them
+    final deniedPlayers = game.players.where((p) => p.denied).toList();
+    for (final denied in deniedPlayers) {
+      game.players.removeWhere((p) => p.uuid == denied.uuid);
     }
-    await _save(game);
-  }
-
-  Future<void> _handleDeny(FcmGameMessage msg) async {
-    final game = _games.cast<RemoteGame?>().firstWhere(
-          (g) => g!.gameId == msg.gameId,
-          orElse: () => null,
-        );
-    if (game == null) return;
-
-    // Remove the denying player from the game
-    game.players.removeWhere((p) => p.uuid == msg.senderId);
 
     if (game.players.length <= 1) {
       game.status = RemoteGameStatus.finished;
-    } else if (game.allAccepted) {
+      await _save(game);
+      if (deniedPlayers.isNotEmpty) {
+        return '${deniedPlayers.first.name} declined the invite';
+      }
+      return 'Game cancelled';
+    }
+
+    // Check if all remaining players have accepted
+    if (game.allAccepted) {
       _finalizeGame(game);
     }
+
+    // Merge moves: accept if incoming has more and they validate
+    if (incomingMoves.length > game.moves.length) {
+      // Verify our existing moves are a prefix of the incoming moves
+      bool prefixMatch = true;
+      for (var i = 0; i < game.moves.length; i++) {
+        if (game.moves[i].turnSeqNr != incomingMoves[i].turnSeqNr) {
+          prefixMatch = false;
+          break;
+        }
+      }
+
+      if (prefixMatch) {
+        // Validate each new move beyond what we already have
+        final tempGame = RemoteGame(
+          gameId: game.gameId,
+          seed: game.seed,
+          players: game.players,
+          creatorId: game.creatorId,
+          status: game.status,
+          moves: List.of(game.moves),
+        );
+        bool allValid = true;
+        for (var i = game.moves.length; i < incomingMoves.length; i++) {
+          final error = _validateMove(tempGame, incomingMoves[i]);
+          if (error != null) {
+            print('[Game] Rejected incoming move $i: $error');
+            allValid = false;
+            break;
+          }
+          tempGame.moves.add(incomingMoves[i]);
+        }
+
+        if (allValid) {
+          game.moves.clear();
+          game.moves.addAll(incomingMoves);
+        }
+      }
+    }
+
     await _save(game);
+
+    // Generate appropriate toast
+    if (deniedPlayers.isNotEmpty) {
+      return '${deniedPlayers.first.name} declined the invite';
+    }
+    if (incomingMoves.length > game.moves.length - 1) {
+      // New moves arrived
+      return '$senderName played a move';
+    }
+    if (game.status == RemoteGameStatus.active) {
+      return '$senderName accepted the invite';
+    }
+    return 'Game updated from $senderName';
+  }
+
+  /// Try to identify who sent this update by looking at what changed.
+  String _findSender(RemoteGame localGame, List<RemotePlayer> incomingPlayers, List<Move> incomingMoves) {
+    // If there are more moves in incoming, the "sender" is the player whose turn it was
+    if (incomingMoves.length > localGame.moves.length && localGame.players.isNotEmpty) {
+      final playerCount = localGame.players.length;
+      if (playerCount > 0) {
+        final lastMoveIndex = incomingMoves.length - 1;
+        final playerIndex = lastMoveIndex % playerCount;
+        if (playerIndex < localGame.players.length) {
+          final player = localGame.players[playerIndex];
+          if (player.uuid != myId) return player.name;
+        }
+      }
+    }
+
+    // Check for newly accepted players
+    for (final incoming in incomingPlayers) {
+      if (incoming.uuid == myId) continue;
+      final local = localGame.players.cast<RemotePlayer?>().firstWhere(
+        (p) => p!.uuid == incoming.uuid,
+        orElse: () => null,
+      );
+      if (local != null && !local.accepted && incoming.accepted) {
+        return incoming.name;
+      }
+      if (local != null && !local.denied && incoming.denied) {
+        return incoming.name;
+      }
+    }
+
+    // Default: first non-self player
+    for (final p in incomingPlayers) {
+      if (p.uuid != myId) return p.name;
+    }
+    return 'Someone';
   }
 
   /// Validate a move against the current game state.
@@ -344,8 +338,8 @@ class RemoteGameController extends ChangeNotifier {
       moves: game.moves,
     );
 
-    // Verify board hash matches
-    if (move.boardHash != state.board.computeHash()) {
+    // Verify board hash matches (skip if empty hash from binary decode)
+    if (move.boardHash.isNotEmpty && move.boardHash != state.board.computeHash()) {
       return 'Board hash mismatch (desync)';
     }
 
@@ -359,116 +353,5 @@ class RemoteGameController extends ChangeNotifier {
     }
 
     return null;
-  }
-
-  Future<void> _handleMove(FcmGameMessage msg) async {
-    final game = _games.cast<RemoteGame?>().firstWhere(
-          (g) => g!.gameId == msg.gameId,
-          orElse: () => null,
-        );
-    if (game == null) return;
-
-    // Sync player list from the message (handles missed accepts)
-    _syncPlayers(game, msg);
-    final move = msg.move!;
-    // Only append if it's the next expected move
-    if (move.turnSeqNr == game.moves.length) {
-      // Validate the move
-      final error = _validateMove(game, move);
-      if (error != null) {
-        print('[Game] Rejected move from ${msg.senderName}: $error');
-        return;
-      }
-      game.moves.add(move);
-      await _save(game);
-    } else if (move.turnSeqNr > game.moves.length) {
-      // We missed moves — request sync
-      await fcm.sendToPlayer(
-        msg.senderId,
-        FcmGameMessage(
-          type: FcmMessageType.hurry,
-          gameId: msg.gameId,
-          senderId: myId,
-          senderName: myName,
-          targetId: msg.senderId,
-        ).toJson(),
-      );
-    }
-    // If behind, ignore (duplicate)
-  }
-
-  Future<String?> _handleHurry(FcmGameMessage msg) async {
-    final game = _games.cast<RemoteGame?>().firstWhere(
-          (g) => g!.gameId == msg.gameId,
-          orElse: () => null,
-        );
-    if (game == null) return null;
-
-    // Always send our state so they can catch up if needed
-    await sendStateSync(msg.gameId);
-
-    // Check if it's actually our turn — if so, the hurry is legitimate
-    final state = GameState.replayFromMoves(
-      gameId: game.gameId,
-      playerCount: game.players.length,
-      seed: game.seed,
-      moves: game.moves,
-    );
-    final myIndex = game.playerIndex(myId);
-    if (state.currentPlayer == myIndex) {
-      return '${msg.senderName} asks you to hurry up!';
-    } else {
-      // Not our turn — they had stale state, we sent an update
-      return 'Sent game update to ${msg.senderName}';
-    }
-  }
-
-  Future<String?> _handleStateSync(FcmGameMessage msg) async {
-    final game = _games.cast<RemoteGame?>().firstWhere(
-          (g) => g!.gameId == msg.gameId,
-          orElse: () => null,
-        );
-    if (game == null) return null;
-
-    // Sync player list from the message (handles missed accepts)
-    _syncPlayers(game, msg);
-
-    // Accept if incoming has more moves
-    if (msg.moves != null && msg.moves!.length > game.moves.length) {
-      // Validate the new moves by replaying from our known-good state
-      final newMoves = msg.moves!;
-
-      // Verify our existing moves are a prefix of the incoming moves
-      for (var i = 0; i < game.moves.length; i++) {
-        if (game.moves[i].turnSeqNr != newMoves[i].turnSeqNr) {
-          print('[Game] State sync rejected: move history diverged at index $i');
-          return null;
-        }
-      }
-
-      // Validate each new move beyond what we already have
-      final tempGame = RemoteGame(
-        gameId: game.gameId,
-        seed: game.seed,
-        players: game.players,
-        creatorId: game.creatorId,
-        status: game.status,
-        moves: List.of(game.moves),
-      );
-      for (var i = game.moves.length; i < newMoves.length; i++) {
-        final error = _validateMove(tempGame, newMoves[i]);
-        if (error != null) {
-          print('[Game] State sync rejected: move $i invalid — $error');
-          return null;
-        }
-        tempGame.moves.add(newMoves[i]);
-      }
-
-      game.moves.clear();
-      game.moves.addAll(newMoves);
-      await _save(game);
-      return 'Game updated from ${msg.senderName}';
-    }
-    return null; // already up to date
   }
 }

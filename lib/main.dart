@@ -13,6 +13,7 @@ import 'services/dictionary.dart';
 import 'screens/remote_games_screen.dart';
 import 'services/friends_service.dart';
 import 'services/fcm_service.dart';
+import 'services/message_codec.dart';
 import 'services/player_identity.dart';
 import 'services/remote_game_controller.dart';
 import 'services/remote_game_service.dart';
@@ -50,16 +51,29 @@ void main() async {
 
   // Route incoming FCM messages
   fcmService.onMessageHandler((data) async {
-    print('[MSG] Received: ${data['type']}');
-    final type = data['type'] as String?;
-    final sender = data['senderName'] as String? ?? 'Someone';
+    final base64Data = data['d'] as String?;
+    if (base64Data == null) {
+      print('[MSG] Received message without binary data, ignoring');
+      return;
+    }
 
-    if (type == 'friendRequest') {
-      await _handleFriendRequest(data);
-      _showToast('$sender added you as a friend');
-    } else {
-      final toast = await remoteGameController.handleMessage(data);
-      if (toast != null) _showToast(toast);
+    try {
+      final decoded = MessageCodec.decode(base64Data);
+      final msgType = decoded['type'] as String;
+      print('[MSG] Received: $msgType');
+
+      if (msgType == 'friend') {
+        final uuid = decoded['uuid'] as String;
+        final name = decoded['name'] as String;
+        await FriendsService().add(Friend(id: uuid, name: name));
+        print('[Friends] Auto-added $name ($uuid) from friend request');
+        _showToast('$name added you as a friend');
+      } else if (msgType == 'game') {
+        final toast = await remoteGameController.handleGameMessage(decoded);
+        if (toast != null) _showToast(toast);
+      }
+    } catch (e) {
+      print('[MSG] Failed to decode message: $e');
     }
   });
 
@@ -92,7 +106,7 @@ void _checkUrlFragment() {
       final encoded = hash.substring('#notification='.length);
       final jsonStr = Uri.decodeComponent(encoded);
       final data = (jsonDecode(jsonStr) as Map).cast<String, dynamic>();
-      print('[Notification] Opened from URL fragment: ${data['type']}');
+      print('[Notification] Opened from URL fragment');
       web.window.history.replaceState(''.toJS, '', web.window.location.pathname);
       _waitForNavigatorAndHandle(data);
     } catch (e) {
@@ -160,62 +174,48 @@ void _handleFriendLink(String id, String? name) {
   }
 }
 
-Future<void> _handleFriendRequest(Map<String, dynamic> data) async {
-  final senderId = data['senderId'] as String;
-  final senderName = data['senderName'] as String;
-  await FriendsService().add(Friend(id: senderId, name: senderName));
-  print('[Friends] Auto-added $senderName ($senderId) from friend request');
-}
-
 void _handleNotificationClick(Map<String, dynamic> rawData) async {
-  // Parse string values back (FCM data is all strings)
-  final data = fcmService.parseData(rawData);
-  print('[Notification click] type=${data['type']} data=$data');
+  print('[Notification click] data=$rawData');
 
   final nav = navigatorKey.currentState;
   if (nav == null) return;
 
-  final type = data['type'] as String?;
-  final gameId = data['gameId'] as String?;
-
-  // Process the message first (it wasn't handled while the tab was in background)
-  try {
-    if (type == 'friendRequest') {
-      await _handleFriendRequest(data);
-    } else {
-      await remoteGameController.handleMessage(data);
-    }
-  } catch (e) {
-    print('[Notification click] Error processing: $e');
+  // Decode the binary payload if present
+  final base64Data = rawData['d'] as String?;
+  if (base64Data == null) {
+    print('[Notification click] No binary data, ignoring');
+    return;
   }
 
-  switch (type) {
-    case 'friendRequest':
+  try {
+    final decoded = MessageCodec.decode(base64Data);
+    final msgType = decoded['type'] as String;
+
+    // Process the message first (it wasn't handled while the tab was in background)
+    if (msgType == 'friend') {
+      final uuid = decoded['uuid'] as String;
+      final name = decoded['name'] as String;
+      await FriendsService().add(Friend(id: uuid, name: name));
       nav.push(MaterialPageRoute(
         builder: (_) => FriendsScreen(
           identity: playerIdentity,
           fcmService: fcmService,
         ),
       ));
-    case 'invite' || 'accept' || 'deny':
+    } else if (msgType == 'game') {
+      await remoteGameController.handleGameMessage(decoded);
+      final gameId = decoded['gameId'] as String;
       nav.push(MaterialPageRoute(
-        builder: (_) => RemoteGamesScreen(
+        builder: (_) => RemoteGameScreen(
+          gameId: gameId,
           controller: remoteGameController,
           dictionary: dictionary,
           myId: playerIdentity.uuid,
         ),
       ));
-    case 'move' || 'hurry' || 'stateSync':
-      if (gameId != null) {
-        nav.push(MaterialPageRoute(
-          builder: (_) => RemoteGameScreen(
-            gameId: gameId,
-            controller: remoteGameController,
-            dictionary: dictionary,
-            myId: playerIdentity.uuid,
-          ),
-        ));
-      }
+    }
+  } catch (e) {
+    print('[Notification click] Error processing: $e');
   }
 }
 

@@ -77,9 +77,7 @@ class FcmService {
     _setOnMessageCallback(((JSString jsonStr) {
       print('[FCM] Message received via compat SDK');
       try {
-        final data = parseData(
-          (jsonDecode(jsonStr.toDart) as Map<String, dynamic>),
-        );
+        final data = (jsonDecode(jsonStr.toDart) as Map<String, dynamic>);
         handler(data);
       } catch (e) {
         print('[FCM] Failed to parse message: $e');
@@ -87,24 +85,22 @@ class FcmService {
     }).toJS);
   }
 
-  /// Send data to a single player via Cloud Function.
-  Future<void> sendToPlayer(String targetUuid, Map<String, dynamic> data) async {
-    print('[FCM] Sending ${data['type']} to $targetUuid...');
+  /// Send a binary-encoded message to a single player via Cloud Function.
+  /// [base64Data] is the base64-encoded binary payload.
+  /// [extra] contains optional human-readable fields for service worker notifications
+  /// (e.g. 't' for type, 'n' for sender name).
+  Future<void> sendToPlayer(String targetUuid, String base64Data, {Map<String, String>? extra}) async {
+    print('[FCM] Sending to $targetUuid...');
     try {
-      // Convert all values to strings for FCM data message
-      final stringData = <String, String>{};
-      for (final entry in data.entries) {
-        stringData[entry.key] = entry.value is String
-            ? entry.value as String
-            : jsonEncode(entry.value);
-      }
+      final data = <String, String>{'d': base64Data};
+      if (extra != null) data.addAll(extra);
 
       final resp = await http.post(
         Uri.parse('$_functionsBase/Send'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'targetUuid': targetUuid,
-          'data': stringData,
+          'data': data,
         }),
       );
       if (resp.statusCode == 200) {
@@ -117,34 +113,13 @@ class FcmService {
     }
   }
 
-  /// Broadcast data to multiple players (excluding self).
-  Future<void> broadcast(List<String> playerIds, String myId, Map<String, dynamic> data) async {
+  /// Broadcast a binary-encoded message to multiple players (excluding self).
+  Future<void> broadcast(List<String> playerIds, String myId, String base64Data, {Map<String, String>? extra}) async {
     for (final id in playerIds) {
       if (id != myId) {
-        await sendToPlayer(id, data);
+        await sendToPlayer(id, base64Data, extra: extra);
       }
     }
-  }
-
-  /// Parse FCM data message — values arrive as strings, parse JSON where needed.
-  /// Only jsonDecode keys known to carry structured data; leave others as-is.
-  static const _jsonKeys = {'seed', 'playerIds', 'playerNames', 'move', 'moves', 'swappedTileLetters'};
-
-  Map<String, dynamic> parseData(Map<String, dynamic> raw) {
-    final result = <String, dynamic>{};
-    for (final entry in raw.entries) {
-      final value = entry.value;
-      if (value is String && _jsonKeys.contains(entry.key)) {
-        try {
-          result[entry.key] = jsonDecode(value);
-        } catch (_) {
-          result[entry.key] = value;
-        }
-      } else {
-        result[entry.key] = value;
-      }
-    }
-    return result;
   }
 }
 

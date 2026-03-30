@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'fcm_service.dart';
+import 'message_codec.dart';
 
 class Friend {
   final String id;
@@ -52,10 +53,7 @@ class FriendsService extends ChangeNotifier {
 
   /// Send a friend request via FCM so the other side adds you too.
   Future<void> sendFriendRequest(FcmService fcm, String myId, String myName, String friendId) async {
-    await fcm.sendToPlayer(friendId, {
-      'type': 'friendRequest',
-      'senderId': myId,
-      'senderName': myName,
-    });
+    final base64Data = MessageCodec.encodeFriendRequest(myId, myName);
+    await fcm.sendToPlayer(friendId, base64Data, extra: {'t': 'friend', 'n': myName});
   }
 }
