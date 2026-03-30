@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/game_state.dart';
 import '../models/remote_game.dart';
 import '../services/friends_service.dart';
 import '../services/remote_game_controller.dart';
@@ -173,12 +174,19 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
         final waiting = game.players.where((p) => !p.accepted).map((p) => p.name);
         return 'Waiting for ${waiting.join(", ")}';
       case RemoteGameStatus.active:
-        final allAccepted = game.allAccepted;
-        if (!allAccepted) {
+        if (!game.allAccepted) {
           final waiting = game.players.where((p) => !p.accepted).map((p) => p.name);
           return 'Waiting for ${waiting.join(", ")}';
         }
-        return '${game.moves.length} moves';
+        final state = GameState.replayFromMoves(
+          gameId: game.gameId,
+          playerCount: game.players.length,
+          seed: game.seed,
+          moves: game.moves,
+        );
+        final currentPlayer = game.players[state.currentPlayer];
+        final turnName = currentPlayer.uuid == widget.myId ? 'Your' : "${currentPlayer.name}'s";
+        return "$turnName turn — ${game.moves.length} moves";
       case RemoteGameStatus.finished:
         return 'Finished — ${game.moves.length} moves';
     }
