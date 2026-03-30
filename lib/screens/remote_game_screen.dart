@@ -120,6 +120,11 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
       onHurry: gameState.currentPlayer != localPlayerIndex
           ? () async {
               await widget.controller.sendGameState(game.gameId);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Sent nudge')),
+                );
+              }
             }
           : null,
     );
