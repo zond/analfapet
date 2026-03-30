@@ -87,7 +87,11 @@ Future<void> _handleFriendRequest(Map<String, dynamic> data) async {
   print('[Friends] Auto-added $senderName ($senderId) from friend request');
 }
 
-void _handleNotificationClick(Map<String, dynamic> data) async {
+void _handleNotificationClick(Map<String, dynamic> rawData) async {
+  // Parse string values back (FCM data is all strings)
+  final data = fcmService.parseData(rawData);
+  print('[Notification click] type=${data['type']} data=$data');
+
   final nav = navigatorKey.currentState;
   if (nav == null) return;
 
@@ -95,10 +99,14 @@ void _handleNotificationClick(Map<String, dynamic> data) async {
   final gameId = data['gameId'] as String?;
 
   // Process the message first (it wasn't handled while the tab was in background)
-  if (type == 'friendRequest') {
-    await _handleFriendRequest(data);
-  } else {
-    await remoteGameController.handleMessage(data);
+  try {
+    if (type == 'friendRequest') {
+      await _handleFriendRequest(data);
+    } else {
+      await remoteGameController.handleMessage(data);
+    }
+  } catch (e) {
+    print('[Notification click] Error processing: $e');
   }
 
   switch (type) {

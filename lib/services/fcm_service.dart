@@ -77,7 +77,7 @@ class FcmService {
     _setOnMessageCallback(((JSString jsonStr) {
       print('[FCM] Message received via compat SDK');
       try {
-        final data = _parseData(
+        final data = parseData(
           (jsonDecode(jsonStr.toDart) as Map<String, dynamic>),
         );
         handler(data);
@@ -127,7 +127,7 @@ class FcmService {
   }
 
   /// Parse FCM data message — values arrive as strings, parse JSON where needed.
-  Map<String, dynamic> _parseData(Map<String, dynamic> raw) {
+  Map<String, dynamic> parseData(Map<String, dynamic> raw) {
     final result = <String, dynamic>{};
     for (final entry in raw.entries) {
       final value = entry.value;
