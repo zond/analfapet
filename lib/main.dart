@@ -89,6 +89,17 @@ void main() async {
       if (type == 'notification-click') {
         final data = (map['data'] as Map).cast<String, dynamic>();
         _handleNotificationClick(data);
+      } else if (type == 'sw-updated') {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: const Text('New version available'),
+            duration: const Duration(seconds: 30),
+            action: SnackBarAction(
+              label: 'RELOAD',
+              onPressed: () => web.window.location.reload(),
+            ),
+          ),
+        );
       }
     }).toJS,
   );

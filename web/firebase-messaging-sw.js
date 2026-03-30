@@ -9,7 +9,12 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
       Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
-    ).then(() => self.clients.claim())
+    ).then(() => self.clients.claim()).then(() => {
+      // Notify all clients that a new version is active
+      self.clients.matchAll({type: 'window'}).then((clients) => {
+        clients.forEach((client) => client.postMessage({type: 'sw-updated'}));
+      });
+    })
   );
 });
 

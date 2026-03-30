@@ -23,7 +23,10 @@ class FcmService {
       final baseHref = web.document.querySelector('base')?.getAttribute('href') ?? '/';
       final swUrl = '${baseHref}firebase-messaging-sw.js';
       print('[FCM] Registering service worker at $swUrl');
-      await web.window.navigator.serviceWorker.register(swUrl.toJS).toDart;
+      await web.window.navigator.serviceWorker.register(
+        swUrl.toJS,
+        web.RegistrationOptions(updateViaCache: 'none'),
+      ).toDart;
       print('[FCM] Service worker registered, waiting for ready...');
       final swReg = await web.window.navigator.serviceWorker.ready.toDart;
       print('[FCM] Service worker ready');
