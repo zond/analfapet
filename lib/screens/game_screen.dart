@@ -184,8 +184,20 @@ class _GameScreenState extends State<GameScreen> {
       final local = boardBox.globalToLocal(_dragPosition);
       final boardSize = boardBox.size.width;
       if (local.dx >= 0 && local.dx < boardSize && local.dy >= 0 && local.dy < boardSize) {
-        final (row, col) = BoardWidget.positionToCell(local, boardSize);
-        if (game.board.isEmpty(row, col) && !_pendingPlacements.any((p) => p.row == row && p.col == col)) {
+        var (row, col) = BoardWidget.positionToCell(local, boardSize);
+
+        // If target cell is occupied, find the nearest empty cell
+        if (!_isCellFree(row, col)) {
+          final nearest = _findNearestFreeCell(row, col);
+          if (nearest != null) {
+            (row, col) = nearest;
+          } else {
+            // No free cell nearby — fall through to rack return
+            row = -1;
+          }
+        }
+
+        if (row >= 0 && _isCellFree(row, col)) {
           if (_dragTile!.letter == '*') {
             final tile = _dragTile!;
             setState(() {
@@ -211,6 +223,25 @@ class _GameScreenState extends State<GameScreen> {
       _dragTile = null;
       _dragFromRackIndex = null;
     });
+  }
+
+  bool _isCellFree(int row, int col) =>
+      game.board.isEmpty(row, col) && !_pendingPlacements.any((p) => p.row == row && p.col == col);
+
+  /// Find the nearest free cell using a spiral search from (row, col).
+  (int, int)? _findNearestFreeCell(int row, int col) {
+    for (var dist = 1; dist <= 3; dist++) {
+      for (var dr = -dist; dr <= dist; dr++) {
+        for (var dc = -dist; dc <= dist; dc++) {
+          if (dr.abs() != dist && dc.abs() != dist) continue; // only check the ring
+          final r = row + dr, c = col + dc;
+          if (r >= 0 && r < Board.size && c >= 0 && c < Board.size && _isCellFree(r, c)) {
+            return (r, c);
+          }
+        }
+      }
+    }
+    return null;
   }
 
   /// Calculate rack insert index from a global drop position.
