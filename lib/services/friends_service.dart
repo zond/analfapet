@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'fcm_service.dart';
 
 class Friend {
   final String id;
@@ -40,5 +41,14 @@ class FriendsService {
     final friends = await load();
     friends.removeWhere((f) => f.id == id);
     await save(friends);
+  }
+
+  /// Send a friend request via FCM so the other side adds you too.
+  Future<void> sendFriendRequest(FcmService fcm, String myId, String myName, String friendId) async {
+    await fcm.sendToPlayer(friendId, {
+      'type': 'friendRequest',
+      'senderId': myId,
+      'senderName': myName,
+    });
   }
 }

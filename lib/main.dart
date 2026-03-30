@@ -7,6 +7,7 @@ import 'screens/friends_screen.dart';
 import 'screens/game_screen.dart';
 import 'services/dictionary.dart';
 import 'screens/remote_games_screen.dart';
+import 'services/friends_service.dart';
 import 'services/fcm_service.dart';
 import 'services/player_identity.dart';
 import 'services/remote_game_controller.dart';
@@ -30,9 +31,23 @@ void main() async {
   );
   await remoteGameController.load();
 
-  fcmService.onMessageHandler(remoteGameController.handleMessage);
+  fcmService.onMessageHandler((data) async {
+    final type = data['type'] as String?;
+    if (type == 'friendRequest') {
+      await _handleFriendRequest(data);
+    } else {
+      await remoteGameController.handleMessage(data);
+    }
+  });
 
   runApp(const AnalfapetApp());
+}
+
+Future<void> _handleFriendRequest(Map<String, dynamic> data) async {
+  final senderId = data['senderId'] as String;
+  final senderName = data['senderName'] as String;
+  await FriendsService().add(Friend(id: senderId, name: senderName));
+  print('[Friends] Auto-added $senderName ($senderId) from friend request');
 }
 
 class AnalfapetApp extends StatelessWidget {
@@ -111,7 +126,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openFriends() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => FriendsScreen(playerId: playerIdentity.uuid)),
+      MaterialPageRoute(builder: (_) => FriendsScreen(
+        playerId: playerIdentity.uuid,
+        playerName: 'Me',
+        fcmService: fcmService,
+      )),
     );
   }
 

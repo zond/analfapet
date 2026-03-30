@@ -3,13 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../services/fcm_service.dart';
 import '../services/friends_service.dart';
 import 'qr_scanner_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   final String playerId;
+  final String playerName;
+  final FcmService fcmService;
 
-  const FriendsScreen({super.key, required this.playerId});
+  const FriendsScreen({
+    super.key,
+    required this.playerId,
+    required this.playerName,
+    required this.fcmService,
+  });
 
   @override
   State<FriendsScreen> createState() => _FriendsScreenState();
@@ -18,6 +26,14 @@ class FriendsScreen extends StatefulWidget {
 class _FriendsScreenState extends State<FriendsScreen> {
   final _friendsService = FriendsService();
   List<Friend> _friends = [];
+
+  Future<void> _addAndNotify(Friend friend) async {
+    await _friendsService.add(friend);
+    await _friendsService.sendFriendRequest(
+      widget.fcmService, widget.playerId, widget.playerName, friend.id,
+    );
+    await _load();
+  }
   bool _loading = true;
 
   @override
@@ -141,8 +157,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
               final name = nameController.text.trim();
               final id = idController.text.trim();
               if (name.isNotEmpty && id.isNotEmpty) {
-                await _friendsService.add(Friend(id: id, name: name));
-                await _load();
+                await _addAndNotify(Friend(id: id, name: name));
                 if (context.mounted) Navigator.pop(context);
               }
             },
@@ -180,8 +195,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
             onPressed: () async {
               final name = nameController.text.trim();
               if (name.isNotEmpty) {
-                await _friendsService.add(Friend(id: id, name: name));
-                await _load();
+                await _addAndNotify(Friend(id: id, name: name));
                 if (context.mounted) Navigator.pop(context);
               }
             },
