@@ -102,11 +102,30 @@ class RemoteGameController extends ChangeNotifier {
     final game = _games.firstWhere((g) => g.gameId == gameId);
     final base64Data = MessageCodec.encodeGameState(game);
     final notifType = MessageCodec.notificationType(game);
+
+    // Include whose turn it is for notification text
+    String? turnName;
+    if (game.status == RemoteGameStatus.active && game.moves.isNotEmpty) {
+      final state = GameState.replayFromMoves(
+        gameId: game.gameId,
+        playerCount: game.players.length,
+        seed: game.seed,
+        moves: game.moves,
+      );
+      if (!state.gameOver) {
+        turnName = game.players[state.currentPlayer].name;
+      }
+    }
+
     await fcm.broadcast(
       game.players.map((p) => p.uuid).toList(),
       myId,
       base64Data,
-      extra: {'t': notifType, 'n': myName},
+      extra: {
+        't': notifType,
+        'n': myName,
+        if (turnName != null) 'turn': turnName,
+      },
     );
   }
 
@@ -331,8 +350,13 @@ class RemoteGameController extends ChangeNotifier {
       await sendGameState(gameId);
     }
 
-    // Fix #15: Only return toast if something changed
-    if (!anythingChanged && !movesRejected) return null;
+    // If nothing changed, it's a nudge — show it
+    if (!anythingChanged && !movesRejected) {
+      if (game.status == RemoteGameStatus.active) {
+        return '$senderName sent a nudge';
+      }
+      return null;
+    }
 
     // Fix #9: Toast for rejected moves
     if (movesRejected) {
@@ -344,7 +368,19 @@ class RemoteGameController extends ChangeNotifier {
       return '${deniedPlayers.first.name} declined the invite';
     }
     if (movesMerged) {
-      return '$senderName played a move';
+      // Determine whose turn it is now
+      final state = GameState.replayFromMoves(
+        gameId: game.gameId,
+        playerCount: game.players.length,
+        seed: game.seed,
+        moves: game.moves,
+      );
+      if (state.gameOver) {
+        return 'Game over!';
+      }
+      final currentPlayer = game.players[state.currentPlayer];
+      final turnName = currentPlayer.uuid == myId ? 'Your' : "${currentPlayer.name}'s";
+      return '$senderName played — $turnName turn';
     }
     if (game.status == RemoteGameStatus.active && !wasActive) {
       return '$senderName accepted the invite';

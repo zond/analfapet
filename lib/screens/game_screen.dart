@@ -87,15 +87,27 @@ class _GameScreenState extends State<GameScreen> {
   void didUpdateWidget(covariant GameScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(widget.gameState, oldWidget.gameState)) {
-      // Return any pending placements that now conflict with the updated board
-      final conflicting = _pendingPlacements.where(
-        (p) => !widget.gameState.board.isEmpty(p.row, p.col),
-      ).toList();
-      for (final p in conflicting) {
-        _pendingPlacements.remove(p);
-        _myRack.add(p.placedTile.tile);
-      }
       _dragTile = null;
+
+      // The new GameState has a fresh rack from replay (all tiles present).
+      // We need to remove tiles that are currently in _pendingPlacements
+      // from the new rack, and return any that now conflict with the board.
+      final stillValid = <TilePlacement>[];
+      for (final p in _pendingPlacements) {
+        if (widget.gameState.board.isEmpty(p.row, p.col)) {
+          // Cell is still free — keep the placement, remove tile from new rack
+          final rackIdx = _myRack.indexWhere((t) => t == p.placedTile.tile);
+          if (rackIdx >= 0) {
+            _myRack.removeAt(rackIdx);
+            stillValid.add(p);
+          }
+          // If tile not found in rack (shouldn't happen), just drop the placement
+        }
+        // If cell is now occupied, tile stays in the new rack (already there from replay)
+      }
+      _pendingPlacements
+        ..clear()
+        ..addAll(stillValid);
     }
   }
 
@@ -665,9 +677,15 @@ class _GameScreenState extends State<GameScreen> {
                                   tooltip: 'Shuffle rack',
                                   color: Colors.white70,
                                 ),
+                                IconButton(
+                                  onPressed: _pendingPlacements.isNotEmpty ? _recallTiles : null,
+                                  icon: const Icon(Icons.undo),
+                                  tooltip: 'Recall tiles',
+                                  color: Colors.white70,
+                                ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Waiting for ${_playerName(game.currentPlayer)}...',
+                                  '${_playerName(game.currentPlayer)}\'s turn',
                                   style: const TextStyle(color: Colors.white54, fontSize: 16),
                                 ),
                                 if (widget.onHurry != null) ...[

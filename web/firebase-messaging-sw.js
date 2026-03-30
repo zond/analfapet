@@ -73,8 +73,9 @@ messaging.onBackgroundMessage((payload) => {
       body = `${sender} invited you to a game`;
       break;
     case 'move':
-      title = 'Your turn!';
-      body = `${sender} played a move`;
+      const turn = payload.data?.turn;
+      title = 'Analfapet';
+      body = turn ? `${sender} played — ${turn}'s turn` : `${sender} played`;
       break;
     default:
       title = 'Analfapet';
