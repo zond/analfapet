@@ -376,11 +376,8 @@ class RemoteGameController extends ChangeNotifier {
       await sendGameState(gameId);
     }
 
-    // If nothing changed, it's a nudge — only show if viewing that game
+    // If nothing changed, no toast (background notification handles nudges)
     if (!anythingChanged && !movesRejected) {
-      if (game.status == RemoteGameStatus.active && currentViewingGameId == gameId) {
-        return '$senderName sent a nudge';
-      }
       return null;
     }
 
