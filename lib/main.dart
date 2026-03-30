@@ -16,6 +16,13 @@ import 'services/remote_game_service.dart';
 final playerIdentity = PlayerIdentity();
 final fcmService = FcmService();
 late final RemoteGameController remoteGameController;
+final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+void _showToast(String message) {
+  scaffoldMessengerKey.currentState?.showSnackBar(
+    SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+  );
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,10 +42,27 @@ void main() async {
   fcmService.onMessageHandler((data) async {
     print('[MSG] Received: ${data['type']}');
     final type = data['type'] as String?;
+    final sender = data['senderName'] as String? ?? 'Someone';
+
     if (type == 'friendRequest') {
       await _handleFriendRequest(data);
+      _showToast('$sender added you as a friend');
     } else {
       await remoteGameController.handleMessage(data);
+      switch (type) {
+        case 'invite':
+          _showToast('$sender invites you to a game');
+        case 'accept':
+          _showToast('$sender accepted the invite');
+        case 'deny':
+          _showToast('$sender declined the invite');
+        case 'move':
+          _showToast('$sender played a move');
+        case 'hurry':
+          _showToast('$sender asks you to hurry up!');
+        case 'stateSync':
+          _showToast('Game state synced');
+      }
     }
   });
 
@@ -58,6 +82,7 @@ class AnalfapetApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: scaffoldMessengerKey,
       title: 'Analfapet',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
