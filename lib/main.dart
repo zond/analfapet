@@ -6,17 +6,32 @@ import 'models/game_state.dart';
 import 'screens/friends_screen.dart';
 import 'screens/game_screen.dart';
 import 'services/dictionary.dart';
+import 'screens/remote_games_screen.dart';
 import 'services/fcm_service.dart';
 import 'services/player_identity.dart';
+import 'services/remote_game_controller.dart';
+import 'services/remote_game_service.dart';
 
 final playerIdentity = PlayerIdentity();
 final fcmService = FcmService();
+late final RemoteGameController remoteGameController;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await playerIdentity.init();
   await fcmService.init(playerIdentity.uuid);
+
+  remoteGameController = RemoteGameController(
+    fcm: fcmService,
+    storage: RemoteGameService(),
+    myId: playerIdentity.uuid,
+    myName: 'Me', // TODO: let user set a display name
+  );
+  await remoteGameController.load();
+
+  fcmService.onMessageHandler(remoteGameController.handleMessage);
+
   runApp(const AnalfapetApp());
 }
 
@@ -80,6 +95,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openRemoteGames() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RemoteGamesScreen(
+          controller: remoteGameController,
+          dictionary: _dictionary!,
+          myId: playerIdentity.uuid,
+        ),
+      ),
+    );
+  }
+
   void _openFriends() {
     Navigator.push(
       context,
@@ -128,9 +156,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
                       _MenuButton(
-                        onPressed: null, // TODO: implement
+                        onPressed: _openRemoteGames,
                         icon: Icons.wifi,
-                        label: 'Remote game',
+                        label: 'Remote games',
                       ),
                       const SizedBox(height: 12),
                       _MenuButton(

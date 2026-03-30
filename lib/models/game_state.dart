@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'board.dart';
+import 'move.dart';
 import 'tile.dart';
 
 class GameState {
@@ -74,6 +75,50 @@ class GameState {
     for (var i = 0; i < toDraw; i++) {
       rack.add(bag.removeLast());
     }
+  }
+
+  /// Apply a move to this game state, mutating it in place.
+  void applyMove(Move move) {
+    switch (move.type) {
+      case MoveType.play:
+        for (final p in move.placements) {
+          board.set(p.row, p.col, p.placedTile);
+          currentRack.remove(p.placedTile.tile);
+        }
+        scores[currentPlayer] += move.score;
+        drawTiles(currentRack, move.placements.length);
+        consecutivePasses = 0;
+      case MoveType.pass:
+        consecutivePasses++;
+      case MoveType.swap:
+        consecutivePasses = 0;
+      case MoveType.resign:
+        gameOver = true;
+    }
+    if (consecutivePasses >= playerCount * 2) {
+      gameOver = true;
+    }
+    if (!gameOver) {
+      nextTurn();
+    }
+  }
+
+  /// Reconstruct a full GameState by replaying seed + moves.
+  static GameState replayFromMoves({
+    required String gameId,
+    required int playerCount,
+    required int seed,
+    required List<Move> moves,
+  }) {
+    final state = GameState.newGame(
+      gameId: gameId,
+      playerCount: playerCount,
+      seed: seed,
+    );
+    for (final move in moves) {
+      state.applyMove(move);
+    }
+    return state;
   }
 
   static void _shuffleBag(List<Tile> bag, SeededPRNG prng) {

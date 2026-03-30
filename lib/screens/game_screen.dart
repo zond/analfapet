@@ -12,11 +12,23 @@ class GameScreen extends StatefulWidget {
   final GameState gameState;
   final Dictionary dictionary;
 
+  // Remote mode (null = local mode)
+  final int? localPlayerIndex;
+  final List<String>? playerNames;
+  final Future<void> Function(Move move)? onMoveSubmitted;
+  final VoidCallback? onHurry;
+
   const GameScreen({
     super.key,
     required this.gameState,
     required this.dictionary,
+    this.localPlayerIndex,
+    this.playerNames,
+    this.onMoveSubmitted,
+    this.onHurry,
   });
+
+  bool get isRemote => localPlayerIndex != null;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -35,6 +47,21 @@ class _GameScreenState extends State<GameScreen> {
   final GlobalKey _boardKey = GlobalKey();
 
   GameState get game => widget.gameState;
+  bool get isRemote => widget.isRemote;
+  bool get isMyTurn => isRemote
+      ? game.currentPlayer == widget.localPlayerIndex
+      : true; // local mode: always your turn (handover handles switching)
+
+  List<Tile> get _myRack => isRemote
+      ? game.racks[widget.localPlayerIndex!]
+      : game.currentRack;
+
+  String _playerName(int index) {
+    if (widget.playerNames != null && index < widget.playerNames!.length) {
+      return widget.playerNames![index];
+    }
+    return 'Player ${index + 1}';
+  }
 
   @override
   void initState() {
@@ -45,14 +72,16 @@ class _GameScreenState extends State<GameScreen> {
   // --- Drag handling ---
 
   void _onRackTileDragStart(int index, Offset globalPosition) {
+    if (!isMyTurn) return;
     setState(() {
-      _dragTile = game.currentRack[index];
+      _dragTile = _myRack[index];
       _dragPosition = globalPosition;
-      game.currentRack.removeAt(index);
+      _myRack.removeAt(index);
     });
   }
 
   void _onBoardTileDragStart(int row, int col, Offset globalPosition) {
+    if (!isMyTurn) return;
     final idx = _pendingPlacements.indexWhere((p) => p.row == row && p.col == col);
     if (idx < 0) return;
     setState(() {
@@ -71,7 +100,6 @@ class _GameScreenState extends State<GameScreen> {
   void _onDragEnd() {
     if (_dragTile == null) return;
 
-    // Check if dropped on the board
     final boardBox = _boardKey.currentContext?.findRenderObject() as RenderBox?;
     if (boardBox != null) {
       final local = boardBox.globalToLocal(_dragPosition);
@@ -80,11 +108,9 @@ class _GameScreenState extends State<GameScreen> {
         final (row, col) = BoardWidget.positionToCell(local, boardSize);
         if (game.board.isEmpty(row, col) && !_pendingPlacements.any((p) => p.row == row && p.col == col)) {
           if (_dragTile!.letter == '*') {
-            // For blank tiles, show picker then place
             final tile = _dragTile!;
             setState(() {
               _dragTile = null;
-  
             });
             _showBlankLetterPicker(row, col, tile);
             return;
@@ -92,28 +118,25 @@ class _GameScreenState extends State<GameScreen> {
           setState(() {
             _pendingPlacements.add(TilePlacement(row, col, PlacedTile(_dragTile!)));
             _dragTile = null;
-
           });
           return;
         }
       }
     }
 
-    // Not dropped on valid cell — return to rack
     setState(() {
-      game.currentRack.add(_dragTile!);
+      _myRack.add(_dragTile!);
       _dragTile = null;
     });
   }
 
-  // --- Cell tap (to pick up pending tiles) ---
-
   void _onCellTap(int row, int col) {
+    if (!isMyTurn) return;
     final existingIndex = _pendingPlacements.indexWhere((p) => p.row == row && p.col == col);
     if (existingIndex >= 0) {
       setState(() {
         final removed = _pendingPlacements.removeAt(existingIndex);
-        game.currentRack.add(removed.placedTile.tile);
+        _myRack.add(removed.placedTile.tile);
       });
     }
   }
@@ -152,9 +175,8 @@ class _GameScreenState extends State<GameScreen> {
           );
         });
       } else {
-        // Cancelled — return to rack
         setState(() {
-          game.currentRack.add(tile);
+          _myRack.add(tile);
         });
       }
     });
@@ -168,14 +190,6 @@ class _GameScreenState extends State<GameScreen> {
     return tempBoard;
   }
 
-  void _endTurn() {
-    setState(() {
-      _pendingPlacements.clear();
-      game.nextTurn();
-      _handover = true;
-    });
-  }
-
   void _submitMove() {
     final isFirstMove = game.turnSeqNr == 0;
     final result = _validator.validate(game.board, _pendingPlacements, isFirstMove);
@@ -187,26 +201,70 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
 
-    for (final p in _pendingPlacements) {
-      game.board.set(p.row, p.col, p.placedTile);
-    }
-    game.scores[game.currentPlayer] += result.score;
-    game.drawTiles(game.currentRack, _pendingPlacements.length);
-    game.consecutivePasses = 0;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${result.wordsFormed.join(", ")} — ${result.score} points!'),
-      ),
+    final move = Move(
+      type: MoveType.play,
+      turnSeqNr: game.turnSeqNr,
+      boardHash: game.board.computeHash(),
+      placements: List.of(_pendingPlacements),
+      score: result.score,
     );
 
-    _endTurn();
+    if (isRemote) {
+      // Apply locally and send via controller
+      game.applyMove(move);
+      setState(() => _pendingPlacements.clear());
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.wordsFormed.join(", ")} — ${result.score} points!')),
+      );
+
+      widget.onMoveSubmitted?.call(move);
+    } else {
+      // Local mode
+      for (final p in _pendingPlacements) {
+        game.board.set(p.row, p.col, p.placedTile);
+      }
+      game.scores[game.currentPlayer] += result.score;
+      game.drawTiles(game.currentRack, _pendingPlacements.length);
+      game.consecutivePasses = 0;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.wordsFormed.join(", ")} — ${result.score} points!')),
+      );
+
+      setState(() {
+        _pendingPlacements.clear();
+        game.nextTurn();
+        _handover = true;
+      });
+    }
+  }
+
+  void _pass() {
+    final move = Move(
+      type: MoveType.pass,
+      turnSeqNr: game.turnSeqNr,
+      boardHash: game.board.computeHash(),
+    );
+
+    if (isRemote) {
+      game.applyMove(move);
+      setState(() => _pendingPlacements.clear());
+      widget.onMoveSubmitted?.call(move);
+    } else {
+      game.consecutivePasses++;
+      setState(() {
+        _pendingPlacements.clear();
+        game.nextTurn();
+        _handover = true;
+      });
+    }
   }
 
   void _recallTiles() {
     setState(() {
       for (final p in _pendingPlacements) {
-        game.currentRack.add(p.placedTile.tile);
+        _myRack.add(p.placedTile.tile);
       }
       _pendingPlacements.clear();
     });
@@ -214,26 +272,29 @@ class _GameScreenState extends State<GameScreen> {
 
   void _shuffleRack() {
     setState(() {
-      game.currentRack.shuffle();
+      _myRack.shuffle();
     });
-  }
-
-  void _pass() {
-    game.consecutivePasses++;
-    _endTurn();
   }
 
   String get _scoreText {
     final parts = <String>[];
     for (var i = 0; i < game.playerCount; i++) {
-      parts.add('P${i + 1}: ${game.scores[i]}');
+      parts.add('${_playerName(i)}: ${game.scores[i]}');
     }
     return parts.join('  ');
   }
 
+  String get _turnLabel {
+    if (isRemote) {
+      return isMyTurn ? 'Your turn' : '${_playerName(game.currentPlayer)}\'s turn';
+    }
+    return _playerName(game.currentPlayer);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_handover) {
+    // Local mode handover screen
+    if (!isRemote && _handover) {
       return Scaffold(
         backgroundColor: const Color(0xFF1B5E20),
         body: GestureDetector(
@@ -244,7 +305,7 @@ class _GameScreenState extends State<GameScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  game.currentPlayerName,
+                  _playerName(game.currentPlayer),
                   style: const TextStyle(
                     fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white,
                   ),
@@ -262,6 +323,7 @@ class _GameScreenState extends State<GameScreen> {
     }
 
     final pendingPositions = {for (final p in _pendingPlacements) (p.row, p.col)};
+    final canInteract = isMyTurn && !game.gameOver;
 
     return Listener(
       onPointerMove: _dragTile != null ? (e) => _onDragUpdate(e.position) : null,
@@ -271,7 +333,7 @@ class _GameScreenState extends State<GameScreen> {
           Scaffold(
             backgroundColor: const Color(0xFF1B5E20),
             appBar: AppBar(
-              title: Text(game.currentPlayerName),
+              title: Text(_turnLabel),
               backgroundColor: const Color(0xFF2E7D32),
               foregroundColor: Colors.white,
               actions: [
@@ -279,7 +341,7 @@ class _GameScreenState extends State<GameScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Center(
                     child: Text(_scoreText,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -305,51 +367,77 @@ class _GameScreenState extends State<GameScreen> {
                       key: _boardKey,
                       board: _boardWithPending,
                       pendingPlacements: pendingPositions,
-                      onCellTap: _onCellTap,
-                      onPendingDragStart: _onBoardTileDragStart,
+                      onCellTap: canInteract ? _onCellTap : null,
+                      onPendingDragStart: canInteract ? _onBoardTileDragStart : null,
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 TileRackWidget(
-                  tiles: game.currentRack,
-                  onTileDragStart: _onRackTileDragStart,
+                  tiles: _myRack,
+                  onTileDragStart: canInteract ? _onRackTileDragStart : null,
                 ),
                 const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        onPressed: _shuffleRack,
-                        icon: const Icon(Icons.shuffle),
-                        tooltip: 'Shuffle rack',
-                        color: Colors.white70,
-                      ),
-                      IconButton(
-                        onPressed: _pendingPlacements.isNotEmpty ? _recallTiles : null,
-                        icon: const Icon(Icons.undo),
-                        tooltip: 'Recall tiles',
-                        color: Colors.white70,
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: _pendingPlacements.isNotEmpty ? _submitMove : null,
-                        icon: const Icon(Icons.check),
-                        label: const Text('Play'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _pass,
-                        icon: const Icon(Icons.skip_next),
-                        tooltip: 'Pass',
-                        color: Colors.white70,
-                      ),
-                    ],
-                  ),
+                  child: canInteract
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            IconButton(
+                              onPressed: _shuffleRack,
+                              icon: const Icon(Icons.shuffle),
+                              tooltip: 'Shuffle rack',
+                              color: Colors.white70,
+                            ),
+                            IconButton(
+                              onPressed: _pendingPlacements.isNotEmpty ? _recallTiles : null,
+                              icon: const Icon(Icons.undo),
+                              tooltip: 'Recall tiles',
+                              color: Colors.white70,
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: _pendingPlacements.isNotEmpty ? _submitMove : null,
+                              icon: const Icon(Icons.check),
+                              label: const Text('Play'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _pass,
+                              icon: const Icon(Icons.skip_next),
+                              tooltip: 'Pass',
+                              color: Colors.white70,
+                            ),
+                          ],
+                        )
+                      : isRemote && !game.gameOver
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Waiting for ${_playerName(game.currentPlayer)}...',
+                                  style: const TextStyle(color: Colors.white54, fontSize: 16),
+                                ),
+                                if (widget.onHurry != null) ...[
+                                  const SizedBox(width: 12),
+                                  IconButton(
+                                    onPressed: widget.onHurry,
+                                    icon: const Icon(Icons.notifications_active),
+                                    tooltip: 'Hurry up',
+                                    color: Colors.orangeAccent,
+                                  ),
+                                ],
+                              ],
+                            )
+                          : game.gameOver
+                              ? const Text(
+                                  'Game over',
+                                  style: TextStyle(color: Colors.white54, fontSize: 16),
+                                )
+                              : const SizedBox.shrink(),
                 ),
               ],
             ),

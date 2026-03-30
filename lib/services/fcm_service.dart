@@ -85,15 +85,25 @@ class FcmService {
     return doc.data()?['fcmToken'] as String?;
   }
 
-  Future<void> sendMove(String targetPlayerId, Map<String, dynamic> moveData) async {
+  /// Send data to a single player via their Firestore inbox.
+  Future<void> sendToPlayer(String targetPlayerId, Map<String, dynamic> data) async {
     await _firestore
         .collection('players')
         .doc(targetPlayerId)
         .collection('inbox')
         .add({
-      'data': jsonEncode(moveData),
+      'data': jsonEncode(data),
       'timestamp': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Broadcast data to multiple players (excluding self).
+  Future<void> broadcast(List<String> playerIds, String myId, Map<String, dynamic> data) async {
+    for (final id in playerIds) {
+      if (id != myId) {
+        await sendToPlayer(id, data);
+      }
+    }
   }
 
   Stream<List<Map<String, dynamic>>> listenForMoves(String playerId) {

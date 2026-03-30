@@ -1,2 +1,3 @@
 - [Firebase project](project_firebase.md) — shared "fcm-switch" project used as FCM relay across multiple apps
 - [Platform target](project_platform.md) — web app, no NFC, friend sharing via QR or UUID only
+- [Remote game design](project_remote_game_design.md) — all state local, FCM relay only, no Firestore game storage
