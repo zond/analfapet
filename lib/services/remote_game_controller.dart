@@ -205,8 +205,7 @@ class RemoteGameController extends ChangeNotifier {
       case FcmMessageType.hurry:
         return await _handleHurry(msg);
       case FcmMessageType.stateSync:
-        await _handleStateSync(msg);
-        return null; // silent
+        return await _handleStateSync(msg);
     }
   }
 
@@ -313,23 +312,25 @@ class RemoteGameController extends ChangeNotifier {
     if (state.currentPlayer == myIndex) {
       return '${msg.senderName} asks you to hurry up!';
     } else {
-      // They had stale state — we sent an update, no need to nag the user
-      return '${msg.senderName} had an old game state, sent update';
+      // Not our turn — they had stale state, we sent an update
+      return 'Sent game update to ${msg.senderName}';
     }
   }
 
-  Future<void> _handleStateSync(FcmGameMessage msg) async {
+  Future<String?> _handleStateSync(FcmGameMessage msg) async {
     final game = _games.cast<RemoteGame?>().firstWhere(
           (g) => g!.gameId == msg.gameId,
           orElse: () => null,
         );
-    if (game == null) return;
+    if (game == null) return null;
 
     // Accept if incoming has more moves
     if (msg.moves != null && msg.moves!.length > game.moves.length) {
       game.moves.clear();
       game.moves.addAll(msg.moves!);
       await _save(game);
+      return 'Game updated from ${msg.senderName}';
     }
+    return null; // already up to date
   }
 }
