@@ -87,12 +87,19 @@ Future<void> _handleFriendRequest(Map<String, dynamic> data) async {
   print('[Friends] Auto-added $senderName ($senderId) from friend request');
 }
 
-void _handleNotificationClick(Map<String, dynamic> data) {
+void _handleNotificationClick(Map<String, dynamic> data) async {
   final nav = navigatorKey.currentState;
   if (nav == null) return;
 
   final type = data['type'] as String?;
   final gameId = data['gameId'] as String?;
+
+  // Process the message first (it wasn't handled while the tab was in background)
+  if (type == 'friendRequest') {
+    await _handleFriendRequest(data);
+  } else {
+    await remoteGameController.handleMessage(data);
+  }
 
   switch (type) {
     case 'friendRequest':
