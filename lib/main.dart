@@ -56,21 +56,8 @@ void main() async {
       await _handleFriendRequest(data);
       _showToast('$sender added you as a friend');
     } else {
-      await remoteGameController.handleMessage(data);
-      switch (type) {
-        case 'invite':
-          _showToast('$sender invites you to a game');
-        case 'accept':
-          _showToast('$sender accepted the invite');
-        case 'deny':
-          _showToast('$sender declined the invite');
-        case 'move':
-          _showToast('$sender played a move');
-        case 'hurry':
-          _showToast('$sender asks you to hurry up!');
-        case 'stateSync':
-          _showToast('Game state synced');
-      }
+      final toast = await remoteGameController.handleMessage(data);
+      if (toast != null) _showToast(toast);
     }
   });
 

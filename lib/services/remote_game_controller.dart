@@ -184,21 +184,28 @@ class RemoteGameController extends ChangeNotifier {
 
   // --- Inbound ---
 
-  Future<void> handleMessage(Map<String, dynamic> data) async {
+  /// Returns a toast message, or null to suppress the toast.
+  Future<String?> handleMessage(Map<String, dynamic> data) async {
     final msg = FcmGameMessage.fromJson(data);
+    final sender = msg.senderName;
     switch (msg.type) {
       case FcmMessageType.invite:
         await _handleInvite(msg);
+        return '$sender invites you to a game';
       case FcmMessageType.accept:
         await _handleAccept(msg);
+        return '$sender accepted the invite';
       case FcmMessageType.deny:
         await _handleDeny(msg);
+        return '$sender declined the invite';
       case FcmMessageType.move:
         await _handleMove(msg);
+        return '$sender played a move';
       case FcmMessageType.hurry:
-        await _handleHurry(msg);
+        return await _handleHurry(msg);
       case FcmMessageType.stateSync:
         await _handleStateSync(msg);
+        return null; // silent
     }
   }
 
@@ -284,9 +291,30 @@ class RemoteGameController extends ChangeNotifier {
     // If behind, ignore (duplicate)
   }
 
-  Future<void> _handleHurry(FcmGameMessage msg) async {
-    // Respond with full state
+  Future<String?> _handleHurry(FcmGameMessage msg) async {
+    final game = _games.cast<RemoteGame?>().firstWhere(
+          (g) => g!.gameId == msg.gameId,
+          orElse: () => null,
+        );
+    if (game == null) return null;
+
+    // Always send our state so they can catch up if needed
     await sendStateSync(msg.gameId);
+
+    // Check if it's actually our turn — if so, the hurry is legitimate
+    final state = GameState.replayFromMoves(
+      gameId: game.gameId,
+      playerCount: game.players.length,
+      seed: game.seed,
+      moves: game.moves,
+    );
+    final myIndex = game.playerIndex(myId);
+    if (state.currentPlayer == myIndex) {
+      return '${msg.senderName} asks you to hurry up!';
+    } else {
+      // They had stale state — we sent an update, no need to nag the user
+      return '${msg.senderName} had an old game state, sent update';
+    }
   }
 
   Future<void> _handleStateSync(FcmGameMessage msg) async {
