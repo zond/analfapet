@@ -1,13 +1,25 @@
 import 'dart:convert';
-
+import 'dart:js_interop';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:web/web.dart' as web;
 
 class FcmService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> init(String playerId) async {
+    // Register service worker with correct relative path (needed for GitHub Pages subpath)
+    try {
+      final baseHref = web.document.querySelector('base')?.getAttribute('href') ?? '/';
+      final swUrl = '${baseHref}firebase-messaging-sw.js';
+      print('[FCM] Registering service worker at $swUrl');
+      await web.window.navigator.serviceWorker.register(swUrl.toJS).toDart;
+      print('[FCM] Service worker registered');
+    } catch (e) {
+      print('[FCM] Service worker registration failed: $e');
+    }
+
     print('[FCM] Requesting permission...');
     final settings = await _messaging.requestPermission();
     print('[FCM] Permission: ${settings.authorizationStatus}');
