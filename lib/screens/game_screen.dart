@@ -173,7 +173,7 @@ class _GameScreenState extends State<GameScreen> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(letter,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF3E2723))),
               ),
             );
           }).toList(),
