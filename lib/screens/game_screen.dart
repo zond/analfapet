@@ -272,6 +272,7 @@ class _GameScreenState extends State<GameScreen> {
       } else {
         setState(() {
           _myRack.add(tile);
+          _userRackOrder = List.from(_myRack);
         });
       }
     });

@@ -105,15 +105,20 @@ class RemoteGameController extends ChangeNotifier {
 
     // Include whose turn it is for notification text
     String? turnName;
-    if (game.status == RemoteGameStatus.active && game.moves.isNotEmpty) {
-      final state = GameState.replayFromMoves(
-        gameId: game.gameId,
-        playerCount: game.players.length,
-        seed: game.seed,
-        moves: game.moves,
-      );
-      if (!state.gameOver) {
-        turnName = game.players[state.currentPlayer].name;
+    if (game.status == RemoteGameStatus.active) {
+      if (game.moves.isNotEmpty) {
+        final state = GameState.replayFromMoves(
+          gameId: game.gameId,
+          playerCount: game.players.length,
+          seed: game.seed,
+          moves: game.moves,
+        );
+        if (!state.gameOver) {
+          turnName = game.players[state.currentPlayer].name;
+        }
+      } else if (game.players.isNotEmpty) {
+        // Zero moves — player 0 goes first
+        turnName = game.players[0].name;
       }
     }
 
@@ -246,9 +251,6 @@ class RemoteGameController extends ChangeNotifier {
     // Game exists — merge state
     final game = existingGame;
 
-    // Determine sender by finding what changed
-    senderName = _findSender(game, incomingPlayers, incomingMoves);
-
     // Track whether anything actually changed (Fix #15)
     bool anythingChanged = false;
     final wasActive = game.status == RemoteGameStatus.active;
@@ -289,6 +291,9 @@ class RemoteGameController extends ChangeNotifier {
         }
       }
     }
+
+    // Determine sender by finding what changed (after player list adoption/status merge)
+    senderName = _findSender(game, incomingPlayers, incomingMoves);
 
     // Handle denied players: remove them (skip if game is active)
     final deniedPlayers = game.players.where((p) => p.denied).toList();
@@ -332,7 +337,7 @@ class RemoteGameController extends ChangeNotifier {
         final tempGame = RemoteGame(
           gameId: game.gameId,
           seed: game.seed,
-          players: game.players,
+          players: List.of(game.players),
           creatorId: game.creatorId,
           status: game.status,
           moves: List.of(game.moves),
