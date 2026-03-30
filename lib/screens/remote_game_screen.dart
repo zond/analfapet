@@ -7,14 +7,14 @@ import 'game_screen.dart';
 
 /// Wrapper that reconstructs GameState from a RemoteGame and renders GameScreen.
 class RemoteGameScreen extends StatefulWidget {
-  final RemoteGame remoteGame;
+  final String gameId;
   final RemoteGameController controller;
   final Dictionary dictionary;
   final String myId;
 
   const RemoteGameScreen({
     super.key,
-    required this.remoteGame,
+    required this.gameId,
     required this.controller,
     required this.dictionary,
     required this.myId,
@@ -43,7 +43,23 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final game = widget.remoteGame;
+    final game = widget.controller.games
+        .cast<RemoteGame?>()
+        .firstWhere((g) => g!.gameId == widget.gameId, orElse: () => null);
+
+    if (game == null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF1B5E20),
+        appBar: AppBar(
+          title: const Text('Game not found'),
+          backgroundColor: const Color(0xFF2E7D32),
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(
+          child: Text('Game was deleted', style: TextStyle(color: Colors.white54)),
+        ),
+      );
+    }
 
     if (!game.allAccepted) {
       final waiting = game.players.where((p) => !p.accepted).map((p) => p.name);

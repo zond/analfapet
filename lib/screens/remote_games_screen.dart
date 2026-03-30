@@ -115,7 +115,7 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => RemoteGameScreen(
-          remoteGame: game,
+          gameId: game.gameId,
           controller: ctrl,
           dictionary: widget.dictionary,
           myId: widget.myId,
