@@ -50,10 +50,12 @@ class _GameScreenState extends State<GameScreen> {
 
   // Drag state
   Tile? _dragTile;
+  int? _dragFromRackIndex;
   Offset _dragPosition = Offset.zero;
 
-  // Board hit testing
+  // Hit testing
   final GlobalKey _boardKey = GlobalKey();
+  final GlobalKey _rackKey = GlobalKey();
 
   GameState get game => widget.gameState;
   bool get isRemote => widget.isRemote;
@@ -93,9 +95,9 @@ class _GameScreenState extends State<GameScreen> {
   // --- Drag handling ---
 
   void _onRackTileDragStart(int index, Offset globalPosition) {
-    if (!isMyTurn) return;
     setState(() {
       _dragTile = _myRack[index];
+      _dragFromRackIndex = index;
       _dragPosition = globalPosition;
       _myRack.removeAt(index);
     });
@@ -108,6 +110,7 @@ class _GameScreenState extends State<GameScreen> {
     setState(() {
       final removed = _pendingPlacements.removeAt(idx);
       _dragTile = removed.placedTile.tile;
+      _dragFromRackIndex = null;
       _dragPosition = globalPosition;
     });
   }
@@ -121,7 +124,8 @@ class _GameScreenState extends State<GameScreen> {
   void _onDragEnd() {
     if (_dragTile == null) return;
 
-    final boardBox = _boardKey.currentContext?.findRenderObject() as RenderBox?;
+    // Only allow placing on board when it's your turn
+    final boardBox = isMyTurn ? _boardKey.currentContext?.findRenderObject() as RenderBox? : null;
     if (boardBox != null) {
       final local = boardBox.globalToLocal(_dragPosition);
       final boardSize = boardBox.size.width;
@@ -145,10 +149,25 @@ class _GameScreenState extends State<GameScreen> {
       }
     }
 
+    // Not dropped on the board — return to rack at the right position
     setState(() {
-      _myRack.add(_dragTile!);
+      final insertAt = _rackInsertIndex(_dragPosition);
+      _myRack.insert(insertAt, _dragTile!);
       _dragTile = null;
+      _dragFromRackIndex = null;
     });
+  }
+
+  /// Calculate rack insert index from a global drop position.
+  int _rackInsertIndex(Offset globalPosition) {
+    final rackBox = _rackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (rackBox == null) return _myRack.length;
+    final local = rackBox.globalToLocal(globalPosition);
+    final tileWidth = 48.0; // tile width (44) + margin (4)
+    final rackStartX = (rackBox.size.width - _myRack.length * tileWidth) / 2;
+    final relativeX = local.dx - rackStartX;
+    final index = (relativeX / tileWidth).floor();
+    return index.clamp(0, _myRack.length);
   }
 
   void _onCellTap(int row, int col) {
@@ -586,8 +605,9 @@ class _GameScreenState extends State<GameScreen> {
                 ),
                 const SizedBox(height: 4),
                 TileRackWidget(
+                  key: _rackKey,
                   tiles: _myRack,
-                  onTileDragStart: canInteract ? _onRackTileDragStart : null,
+                  onTileDragStart: _onRackTileDragStart,
                 ),
                 const SizedBox(height: 8),
                 Padding(
