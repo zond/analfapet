@@ -91,6 +91,7 @@ class FcmService {
 
   /// Send data to a single player via Cloud Function.
   Future<void> sendToPlayer(String targetUuid, Map<String, dynamic> data) async {
+    print('[FCM] Sending ${data['type']} to $targetUuid...');
     try {
       // Convert all values to strings for FCM data message
       final stringData = <String, String>{};
@@ -108,7 +109,9 @@ class FcmService {
           'data': stringData,
         }),
       );
-      if (resp.statusCode != 200) {
+      if (resp.statusCode == 200) {
+        print('[FCM] Send OK');
+      } else {
         print('[FCM] Send failed: ${resp.statusCode} ${resp.body}');
       }
     } catch (e) {
