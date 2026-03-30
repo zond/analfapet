@@ -40,7 +40,14 @@ class _FriendsScreenState extends State<FriendsScreen> {
   @override
   void initState() {
     super.initState();
+    _friendsService.addListener(_load);
     _init();
+  }
+
+  @override
+  void dispose() {
+    _friendsService.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _init() async {

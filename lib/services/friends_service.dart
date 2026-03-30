@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'fcm_service.dart';
 
@@ -14,8 +15,12 @@ class Friend {
       Friend(id: json['id'] as String, name: json['name'] as String);
 }
 
-class FriendsService {
+class FriendsService extends ChangeNotifier {
+  static final FriendsService instance = FriendsService._();
   static const _key = 'friends';
+
+  FriendsService._();
+  factory FriendsService() => instance;
 
   Future<List<Friend>> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -35,12 +40,14 @@ class FriendsService {
     if (friends.any((f) => f.id == friend.id)) return;
     friends.add(friend);
     await save(friends);
+    notifyListeners();
   }
 
   Future<void> remove(String id) async {
     final friends = await load();
     friends.removeWhere((f) => f.id == id);
     await save(friends);
+    notifyListeners();
   }
 
   /// Send a friend request via FCM so the other side adds you too.
