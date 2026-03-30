@@ -62,7 +62,6 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final controller = TextEditingController(text: _identity.name ?? '');
     final name = await showDialog<String>(
       context: context,
-      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('What\'s your name?'),
         content: TextField(
@@ -82,10 +81,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
         ],
       ),
     );
-    if (name != null && name.isNotEmpty) {
-      await _identity.setName(name);
-      setState(() {});
-    }
+    await _identity.setName((name != null && name.isNotEmpty) ? name : 'Anon');
+    setState(() {});
   }
 
   void _editName() async {
