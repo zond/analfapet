@@ -79,9 +79,14 @@ messaging.onBackgroundMessage((payload) => {
       break;
   }
 
+  // Use game ID as tag so notifications for the same game replace each other
+  const tag = payload.data?.g || msgType;
+
   return self.registration.showNotification(title, {
     body,
     icon: 'icons/Icon-192.png',
+    tag,
+    renotify: true,
     data: payload.data,
   });
 });

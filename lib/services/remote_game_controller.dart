@@ -132,6 +132,7 @@ class RemoteGameController extends ChangeNotifier {
       extra: {
         't': notifType,
         'n': myName,
+        'g': gameId,
         if (turnName != null) 'turn': turnName,
       },
     );
