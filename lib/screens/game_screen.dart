@@ -88,27 +88,37 @@ class _GameScreenState extends State<GameScreen> {
     super.didUpdateWidget(oldWidget);
     if (!identical(widget.gameState, oldWidget.gameState)) {
       _dragTile = null;
-
-      // The new GameState has a fresh rack from replay (all tiles present).
-      // We need to remove tiles that are currently in _pendingPlacements
-      // from the new rack, and return any that now conflict with the board.
-      final stillValid = <TilePlacement>[];
-      for (final p in _pendingPlacements) {
-        if (widget.gameState.board.isEmpty(p.row, p.col)) {
-          // Cell is still free — keep the placement, remove tile from new rack
-          final rackIdx = _myRack.indexWhere((t) => t == p.placedTile.tile);
-          if (rackIdx >= 0) {
-            _myRack.removeAt(rackIdx);
-            stillValid.add(p);
-          }
-          // If tile not found in rack (shouldn't happen), just drop the placement
-        }
-        // If cell is now occupied, tile stays in the new rack (already there from replay)
-      }
-      _pendingPlacements
-        ..clear()
-        ..addAll(stillValid);
+      _syncRackWithPending();
     }
+  }
+
+  /// Ensure the rack and pending placements are consistent with the current GameState.
+  /// The GameState from replay has a full rack. We remove tiles that are in
+  /// _pendingPlacements, and return any placements that conflict with the board.
+  void _syncRackWithPending() {
+    // Start from the full rack (as replayed)
+    final fullRack = List<Tile>.from(_myRack);
+
+    // Check which pending placements are still valid
+    final stillValid = <TilePlacement>[];
+    for (final p in _pendingPlacements) {
+      if (widget.gameState.board.isEmpty(p.row, p.col)) {
+        // Cell is still free — try to remove this tile from the full rack
+        final rackIdx = fullRack.indexWhere((t) => t == p.placedTile.tile);
+        if (rackIdx >= 0) {
+          fullRack.removeAt(rackIdx);
+          stillValid.add(p);
+        }
+      }
+    }
+
+    // Replace rack contents with what's left after removing pending tiles
+    _myRack
+      ..clear()
+      ..addAll(fullRack);
+    _pendingPlacements
+      ..clear()
+      ..addAll(stillValid);
   }
 
   // --- Drag handling ---
@@ -423,10 +433,8 @@ class _GameScreenState extends State<GameScreen> {
 
   void _recallTiles() {
     setState(() {
-      for (final p in _pendingPlacements) {
-        _myRack.add(p.placedTile.tile);
-      }
       _pendingPlacements.clear();
+      _syncRackWithPending(); // Restores full rack since no pending left
     });
   }
 
