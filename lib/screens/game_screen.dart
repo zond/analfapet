@@ -756,7 +756,7 @@ class _SimpleBoardPainter extends CustomPainter {
           final bonus = Board.getBonus(r, c);
           canvas.drawRect(rect, Paint()..color = _bonusColor(bonus));
           if (bonus != CellBonus.none) {
-            _drawText(canvas, rect, _bonusLabel(bonus), cellSize * 0.2, Colors.white70);
+            _drawText(canvas, rect, _bonusLabel(bonus), cellSize * 0.35, Colors.white70);
           }
         }
 
