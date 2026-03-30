@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/game_state.dart';
+import '../models/move.dart';
 import '../models/remote_game.dart';
 import '../services/dictionary.dart';
 import '../services/remote_game_controller.dart';
