@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'dart:js_interop';
 import 'package:firebase_core/firebase_core.dart';
@@ -78,6 +79,29 @@ void main() async {
   );
 
   runApp(const AnalfapetApp());
+
+  // Check URL fragment for notification data (when app opened from notification click)
+  _checkUrlFragment();
+}
+
+void _checkUrlFragment() {
+  final hash = web.window.location.hash;
+  if (hash.startsWith('#notification=')) {
+    try {
+      final encoded = hash.substring('#notification='.length);
+      final jsonStr = Uri.decodeComponent(encoded);
+      final data = (jsonDecode(jsonStr) as Map).cast<String, dynamic>();
+      print('[Notification] Opened from URL fragment: ${data['type']}');
+      // Clear the fragment so it doesn't trigger again on refresh
+      web.window.history.replaceState(null.toJS, ''.toJS, web.window.location.pathname.toJS);
+      // Delay slightly to let the navigator initialize
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _handleNotificationClick(data);
+      });
+    } catch (e) {
+      print('[Notification] Failed to parse URL fragment: $e');
+    }
+  }
 }
 
 Future<void> _handleFriendRequest(Map<String, dynamic> data) async {

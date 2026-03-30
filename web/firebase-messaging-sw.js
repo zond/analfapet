@@ -65,9 +65,10 @@ self.addEventListener('notificationclick', (event) => {
           return;
         }
       }
-      // No existing tab — open a new one
+      // No existing tab — open a new one with data in the URL fragment
       if (clients.openWindow) {
-        return clients.openWindow('./');
+        const encoded = data ? encodeURIComponent(JSON.stringify(data)) : '';
+        return clients.openWindow('./#notification=' + encoded);
       }
     })
   );
