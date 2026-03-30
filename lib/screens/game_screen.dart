@@ -479,27 +479,29 @@ class _BoardWithDrag extends StatelessWidget {
         final size = constraints.maxWidth < constraints.maxHeight
             ? constraints.maxWidth
             : constraints.maxHeight;
-        return GestureDetector(
-          onTapUp: onCellTap == null
+        return Listener(
+          onPointerDown: onPendingDragStart == null
               ? null
-              : (details) {
-                  final (row, col) = BoardWidget.positionToCell(details.localPosition, size);
-                  onCellTap!(row, col);
-                },
-          onPanStart: onPendingDragStart == null
-              ? null
-              : (details) {
-                  final (row, col) = BoardWidget.positionToCell(details.localPosition, size);
+              : (event) {
+                  final (row, col) = BoardWidget.positionToCell(event.localPosition, size);
                   if (pendingPlacements.contains((row, col))) {
-                    onPendingDragStart!(row, col, details.globalPosition);
+                    onPendingDragStart!(row, col, event.position);
                   }
                 },
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: CustomPaint(
-              size: Size(size, size),
-              painter: _SimpleBoardPainter(board, pendingPlacements),
+          child: GestureDetector(
+            onTapUp: onCellTap == null
+                ? null
+                : (details) {
+                    final (row, col) = BoardWidget.positionToCell(details.localPosition, size);
+                    onCellTap!(row, col);
+                  },
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: CustomPaint(
+                size: Size(size, size),
+                painter: _SimpleBoardPainter(board, pendingPlacements),
+              ),
             ),
           ),
         );
