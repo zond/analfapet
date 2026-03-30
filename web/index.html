@@ -80,9 +80,18 @@
       authDomain: "fcm-switch.firebaseapp.com",
       storageBucket: "fcm-switch.firebasestorage.app",
     });
+    var _analfapetMessaging = firebase.messaging();
     window._analfapetGetToken = function(swReg, vapidKey) {
-      return firebase.messaging().getToken({ vapidKey: vapidKey, serviceWorkerRegistration: swReg });
+      return _analfapetMessaging.getToken({ vapidKey: vapidKey, serviceWorkerRegistration: swReg });
     };
+    // Listen for foreground messages via compat SDK and forward to Dart callback
+    window._analfapetOnMessage = null;
+    _analfapetMessaging.onMessage(function(payload) {
+      console.log('[SW] Foreground message:', payload);
+      if (window._analfapetOnMessage && payload.data) {
+        window._analfapetOnMessage(JSON.stringify(payload.data));
+      }
+    });
     window._analfapetHasBarcodeDetector = function() {
       return true; // always available via canvas fallback
     };

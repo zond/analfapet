@@ -73,20 +73,18 @@ class FcmService {
   }
 
   void onMessageHandler(void Function(Map<String, dynamic> data) handler) {
-    FirebaseMessaging.onMessage.listen((message) {
-      print('[FCM] Message received: ${message.data}');
-      if (message.data.isNotEmpty) {
-        final data = _parseData(message.data);
+    // Use compat SDK's onMessage via JS callback (same instance as getToken)
+    _setOnMessageCallback(((JSString jsonStr) {
+      print('[FCM] Message received via compat SDK');
+      try {
+        final data = _parseData(
+          (jsonDecode(jsonStr.toDart) as Map<String, dynamic>),
+        );
         handler(data);
+      } catch (e) {
+        print('[FCM] Failed to parse message: $e');
       }
-    });
-    FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      print('[FCM] Message opened app: ${message.data}');
-      if (message.data.isNotEmpty) {
-        final data = _parseData(message.data);
-        handler(data);
-      }
-    });
+    }).toJS);
   }
 
   /// Send data to a single player via Cloud Function.
@@ -153,3 +151,14 @@ JSPromise<JSString?> _jsGetTokenWithSW(web.ServiceWorkerRegistration swReg, Stri
 
 @JS('_analfapetGetToken')
 external JSPromise<JSString?> _callGetToken(web.ServiceWorkerRegistration swReg, JSString vapidKey);
+
+void _setOnMessageCallback(JSFunction callback) {
+  _analfapetSetOnMessage(callback);
+}
+
+@JS()
+external set _analfapetOnMessage(JSFunction? callback);
+
+void _analfapetSetOnMessage(JSFunction callback) {
+  _analfapetOnMessage = callback;
+}
