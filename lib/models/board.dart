@@ -44,6 +44,8 @@ class Board {
 
   bool isEmpty(int row, int col) => cells[row][col] == null;
 
+  bool get isEmptyBoard => cells.every((row) => row.every((cell) => cell == null));
+
   String computeHash() {
     final buf = StringBuffer();
     for (var r = 0; r < size; r++) {

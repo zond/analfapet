@@ -94,14 +94,23 @@ void _checkUrlFragment() {
       print('[Notification] Opened from URL fragment: ${data['type']}');
       // Clear the fragment so it doesn't trigger again on refresh
       web.window.history.replaceState(''.toJS, '', web.window.location.pathname);
-      // Delay slightly to let the navigator initialize
-      Future.delayed(const Duration(milliseconds: 500), () {
-        _handleNotificationClick(data);
-      });
+      // Wait for the navigator to initialize
+      _waitForNavigatorAndHandle(data);
     } catch (e) {
       print('[Notification] Failed to parse URL fragment: $e');
     }
   }
+}
+
+Future<void> _waitForNavigatorAndHandle(Map<String, dynamic> data) async {
+  for (var i = 0; i < 50; i++) {
+    if (navigatorKey.currentState != null) {
+      _handleNotificationClick(data);
+      return;
+    }
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+  print('[Notification] Navigator not ready after 5 seconds, giving up');
 }
 
 Future<void> _handleFriendRequest(Map<String, dynamic> data) async {

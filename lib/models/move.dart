@@ -28,6 +28,7 @@ class Move {
   final String boardHash;
   final List<TilePlacement> placements;
   final int score;
+  final List<String>? swappedTileLetters;
 
   const Move({
     required this.type,
@@ -35,6 +36,7 @@ class Move {
     required this.boardHash,
     this.placements = const [],
     this.score = 0,
+    this.swappedTileLetters,
   });
 
   Map<String, dynamic> toJson() => {
@@ -43,6 +45,7 @@ class Move {
         'boardHash': boardHash,
         'placements': placements.map((p) => p.toJson()).toList(),
         'score': score,
+        if (swappedTileLetters != null) 'swappedTileLetters': swappedTileLetters,
       };
 
   factory Move.fromJson(Map<String, dynamic> json) => Move(
@@ -53,5 +56,6 @@ class Move {
             .map((p) => TilePlacement.fromJson(p as Map<String, dynamic>))
             .toList(),
         score: json['score'] as int,
+        swappedTileLetters: (json['swappedTileLetters'] as List?)?.cast<String>(),
       );
 }

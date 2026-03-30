@@ -32,7 +32,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Future<void> _addAndNotify(Friend friend) async {
     await _friendsService.add(friend);
     await _friendsService.sendFriendRequest(
-      widget.fcmService, _identity.uuid, _identity.name!, friend.id,
+      widget.fcmService, _identity.uuid, _identity.name ?? 'Anon', friend.id,
     );
     await _load();
   }

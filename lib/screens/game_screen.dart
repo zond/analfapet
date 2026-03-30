@@ -161,7 +161,7 @@ class _GameScreenState extends State<GameScreen> {
         content: Wrap(
           spacing: 4,
           runSpacing: 4,
-          children: 'ABCDEFGHIJKLMNOPRSTUVXYÅÄÖ'.split('').map((letter) {
+          children: 'ABCDEFGHIJKLMNOPRSTUVXYZÅÄÖ'.split('').map((letter) {
             return InkWell(
               onTap: () => Navigator.pop(context, letter),
               child: Container(
@@ -203,7 +203,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _submitMove() {
-    final isFirstMove = game.turnSeqNr == 0;
+    final isFirstMove = game.board.isEmptyBoard;
     final result = _validator.validate(game.board, _pendingPlacements, isFirstMove);
 
     if (!result.valid) {
@@ -222,6 +222,10 @@ class _GameScreenState extends State<GameScreen> {
     );
 
     if (isRemote) {
+      // Re-add pending tiles to rack before applyMove (they were removed during drag)
+      for (final p in _pendingPlacements) {
+        _myRack.add(p.placedTile.tile);
+      }
       game.applyMove(move);
       setState(() => _pendingPlacements.clear());
 
@@ -254,6 +258,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _pass() {
+    _recallTiles();
     final move = Move(
       type: MoveType.pass,
       turnSeqNr: game.turnSeqNr,
@@ -267,17 +272,23 @@ class _GameScreenState extends State<GameScreen> {
     } else {
       final player = game.currentPlayer;
       game.consecutivePasses++;
+      if (game.consecutivePasses >= game.playerCount * 2) {
+        game.gameOver = true;
+      }
       setState(() {
         _lastLocalMove = move;
         _lastLocalMovePlayer = player;
         _pendingPlacements.clear();
-        game.nextTurn();
-        _handover = true;
+        if (!game.gameOver) {
+          game.nextTurn();
+        }
+        _handover = !game.gameOver;
       });
     }
   }
 
   void _swapTiles() {
+    _recallTiles();
     // Show dialog to select tiles to swap
     final toSwap = <int>{};
     showDialog(
@@ -340,34 +351,27 @@ class _GameScreenState extends State<GameScreen> {
         return;
       }
 
-      setState(() {
-        // Return selected tiles to bag and draw new ones
-        final indices = result.toList()..sort((a, b) => b.compareTo(a)); // reverse order
-        final returned = <Tile>[];
-        for (final i in indices) {
-          returned.add(_myRack.removeAt(i));
-        }
-        game.bag.addAll(returned);
-        // Shuffle bag deterministically isn't needed for swap — just draw
-        game.drawTiles(_myRack, returned.length);
-      });
+      // Collect the letters of tiles to swap
+      final swappedLetters = result.map((i) => _myRack[i].letter).toList();
 
       final move = Move(
         type: MoveType.swap,
         turnSeqNr: game.turnSeqNr,
         boardHash: game.board.computeHash(),
+        swappedTileLetters: swappedLetters,
       );
 
       if (isRemote) {
         game.applyMove(move);
+        setState(() {});
         widget.onMoveSubmitted?.call(move);
       } else {
         final player = game.currentPlayer;
+        game.applyMove(move);
         setState(() {
           _lastLocalMove = move;
           _lastLocalMovePlayer = player;
-          game.nextTurn();
-          _handover = true;
+          _handover = !game.gameOver;
         });
       }
     });
@@ -403,6 +407,58 @@ class _GameScreenState extends State<GameScreen> {
     return _playerName(game.currentPlayer);
   }
 
+  /// Find the longest word formed by placements on the current board.
+  String _longestWordFromPlacements(List<TilePlacement> placements) {
+    if (placements.isEmpty) return '?';
+    final board = game.board;
+
+    // Determine if horizontal or vertical
+    final rows = placements.map((p) => p.row).toSet();
+    final isHorizontal = rows.length == 1;
+
+    // Find the main word along the primary axis
+    String readWord(int fixedAxis, int start, bool horizontal) {
+      final buf = StringBuffer();
+      var pos = start;
+      while (pos >= 0) {
+        final tile = horizontal ? board.get(fixedAxis, pos) : board.get(pos, fixedAxis);
+        if (tile == null) break;
+        pos--;
+      }
+      pos++;
+      while (pos < Board.size) {
+        final tile = horizontal ? board.get(fixedAxis, pos) : board.get(pos, fixedAxis);
+        if (tile == null) break;
+        buf.write(tile.displayLetter);
+        pos++;
+      }
+      return buf.toString();
+    }
+
+    String longest = '';
+
+    if (isHorizontal) {
+      final row = placements.first.row;
+      final word = readWord(row, placements.first.col, true);
+      if (word.length > longest.length) longest = word;
+      // Check cross words
+      for (final p in placements) {
+        final cross = readWord(p.col, p.row, false);
+        if (cross.length > longest.length) longest = cross;
+      }
+    } else {
+      final col = placements.first.col;
+      final word = readWord(col, placements.first.row, false);
+      if (word.length > longest.length) longest = word;
+      for (final p in placements) {
+        final cross = readWord(p.row, p.col, true);
+        if (cross.length > longest.length) longest = cross;
+      }
+    }
+
+    return longest.isNotEmpty ? longest : '?';
+  }
+
   String? get _lastMoveText {
     final move = _lastMove;
     final playerIdx = _lastMovePlayer;
@@ -410,8 +466,8 @@ class _GameScreenState extends State<GameScreen> {
     final name = _playerName(playerIdx);
     switch (move.type) {
       case MoveType.play:
-        final words = move.placements.map((p) => p.placedTile.displayLetter).join('');
-        return '$name played ${move.score} pts';
+        final word = _longestWordFromPlacements(move.placements);
+        return '$name played $word for ${move.score} pts';
       case MoveType.pass:
         return '$name passed';
       case MoveType.swap:
@@ -447,6 +503,11 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (_lastMoveText != null) ...[
+                  Text(_lastMoveText!,
+                      style: const TextStyle(fontSize: 16, color: Colors.white70)),
+                  const SizedBox(height: 12),
+                ],
                 Text(_scoreText, style: const TextStyle(fontSize: 20, color: Colors.white70)),
                 const SizedBox(height: 32),
                 const Text('Tap to start your turn',
@@ -481,15 +542,6 @@ class _GameScreenState extends State<GameScreen> {
               ),
               backgroundColor: const Color(0xFF2E7D32),
               foregroundColor: Colors.white,
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Center(
-                    child: Text(_scoreText,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
             ),
             body: Column(
               children: [
@@ -518,7 +570,12 @@ class _GameScreenState extends State<GameScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(_scoreText,
+                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                ),
+                const SizedBox(height: 4),
                 TileRackWidget(
                   tiles: _myRack,
                   onTileDragStart: canInteract ? _onRackTileDragStart : null,
@@ -741,6 +798,5 @@ class _SimpleBoardPainter extends CustomPainter {
   };
 
   @override
-  bool shouldRepaint(covariant _SimpleBoardPainter old) =>
-      old.board != board || old.pendingPlacements != pendingPlacements || old.lastMovePlacements != lastMovePlacements;
+  bool shouldRepaint(covariant _SimpleBoardPainter old) => true;
 }

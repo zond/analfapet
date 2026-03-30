@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"sync"
 
 	firebase "firebase.google.com/go/v4"
@@ -13,6 +14,8 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 )
+
+var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
 
 var (
 	dbClient  *db.Client
@@ -90,6 +93,10 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "uuid, token, and secret are required", http.StatusBadRequest)
 		return
 	}
+	if !uuidRegex.MatchString(req.UUID) {
+		http.Error(w, "invalid uuid format", http.StatusBadRequest)
+		return
+	}
 
 	ctx := r.Context()
 	ref := dbClient.NewRef("players/" + req.UUID)
@@ -141,6 +148,10 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.TargetUUID == "" || req.Data == nil {
 		http.Error(w, "targetUuid and data are required", http.StatusBadRequest)
+		return
+	}
+	if !uuidRegex.MatchString(req.TargetUUID) {
+		http.Error(w, "invalid targetUuid format", http.StatusBadRequest)
 		return
 	}
 

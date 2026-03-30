@@ -127,11 +127,14 @@ class FcmService {
   }
 
   /// Parse FCM data message — values arrive as strings, parse JSON where needed.
+  /// Only jsonDecode keys known to carry structured data; leave others as-is.
+  static const _jsonKeys = {'seed', 'playerIds', 'playerNames', 'move', 'moves', 'swappedTileLetters'};
+
   Map<String, dynamic> parseData(Map<String, dynamic> raw) {
     final result = <String, dynamic>{};
     for (final entry in raw.entries) {
       final value = entry.value;
-      if (value is String) {
+      if (value is String && _jsonKeys.contains(entry.key)) {
         try {
           result[entry.key] = jsonDecode(value);
         } catch (_) {

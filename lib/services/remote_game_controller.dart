@@ -24,7 +24,7 @@ class RemoteGameController extends ChangeNotifier {
   List<RemoteGame> get invitations =>
       _games.where((g) => g.status == RemoteGameStatus.invited).toList();
   List<RemoteGame> get activeGames =>
-      _games.where((g) => g.status == RemoteGameStatus.active).toList();
+      _games.where((g) => g.status == RemoteGameStatus.active || g.status == RemoteGameStatus.accepted).toList();
   List<RemoteGame> get finishedGames =>
       _games.where((g) => g.status == RemoteGameStatus.finished).toList();
 
@@ -62,12 +62,11 @@ class RemoteGameController extends ChangeNotifier {
       seed: seed,
       players: players,
       creatorId: myId,
-      status: RemoteGameStatus.active, // creator is auto-accepted, waiting for others
+      status: RemoteGameStatus.accepted, // waiting for other players to accept
     );
 
-    // If only 2 players and creator is auto-accepted, check if game can start
-    if (!game.allAccepted) {
-      game.status = RemoteGameStatus.active; // waiting for acceptances
+    if (game.allAccepted) {
+      game.status = RemoteGameStatus.active;
     }
 
     await _save(game);
@@ -258,8 +257,16 @@ class RemoteGameController extends ChangeNotifier {
         );
     if (game == null) return;
 
-    // Mark game as finished (cancelled)
-    game.status = RemoteGameStatus.finished;
+    // Remove the denying player from the game
+    game.players.removeWhere((p) => p.uuid == msg.senderId);
+
+    if (game.players.length <= 1) {
+      // Not enough players remaining — cancel the game
+      game.status = RemoteGameStatus.finished;
+    } else if (game.allAccepted) {
+      // All remaining players have accepted — start the game
+      game.status = RemoteGameStatus.active;
+    }
     await _save(game);
   }
 

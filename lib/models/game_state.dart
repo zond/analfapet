@@ -87,10 +87,25 @@ class GameState {
         }
         scores[currentPlayer] += move.score;
         drawTiles(currentRack, move.placements.length);
+        if (currentRack.isEmpty && bag.isEmpty) {
+          gameOver = true;
+        }
         consecutivePasses = 0;
       case MoveType.pass:
         consecutivePasses++;
       case MoveType.swap:
+        if (move.swappedTileLetters != null) {
+          final letters = List<String>.from(move.swappedTileLetters!);
+          final removed = <Tile>[];
+          for (final letter in letters) {
+            final idx = currentRack.indexWhere((t) => t.letter == letter);
+            if (idx >= 0) {
+              removed.add(currentRack.removeAt(idx));
+            }
+          }
+          bag.addAll(removed);
+          drawTiles(currentRack, removed.length);
+        }
         consecutivePasses = 0;
       case MoveType.resign:
         gameOver = true;

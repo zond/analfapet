@@ -78,6 +78,14 @@ messaging.onBackgroundMessage((payload) => {
       title = 'Game starting';
       body = `${sender} accepted the invite`;
       break;
+    case 'deny':
+      title = 'Game cancelled';
+      body = `${sender} declined the invite`;
+      break;
+    case 'stateSync':
+      title = 'Game updated';
+      body = `${sender} synced game state`;
+      break;
   }
 
   return self.registration.showNotification(title, {
@@ -104,8 +112,16 @@ self.addEventListener('notificationclick', (event) => {
         }
       }
       // No existing tab — open a new one with data in the URL fragment
+      // Only encode small fields; skip 'moves' which can be very large for stateSync
       if (clients.openWindow) {
-        const encoded = data ? encodeURIComponent(JSON.stringify(data)) : '';
+        let small = {};
+        if (data) {
+          const keep = ['type', 'gameId', 'senderId', 'senderName', 'seed', 'playerIds', 'playerNames', 'targetId'];
+          for (const k of keep) {
+            if (data[k] !== undefined) small[k] = data[k];
+          }
+        }
+        const encoded = encodeURIComponent(JSON.stringify(small));
         return clients.openWindow('./#notification=' + encoded);
       }
     })
