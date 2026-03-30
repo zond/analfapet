@@ -96,8 +96,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
     await _promptForName();
   }
 
+  String get _friendLink {
+    final encoded = Uri.encodeComponent(jsonEncode({'id': _identity.uuid, 'name': _identity.name}));
+    // Use the current origin + base path
+    final base = Uri.base.toString().replaceAll(RegExp(r'#.*$'), '');
+    return '$base#friend=$encoded';
+  }
+
   void _showMyQR() {
     final data = jsonEncode({'id': _identity.uuid, 'name': _identity.name});
+    final link = _friendLink;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -113,6 +121,31 @@ class _FriendsScreenState extends State<FriendsScreen> {
                 version: QrVersions.auto,
                 backgroundColor: Colors.white,
               ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    link,
+                    style: const TextStyle(fontSize: 11, color: Colors.white54),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  tooltip: 'Copy link',
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: link));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Link copied')),
+                    );
+                  },
+                ),
+              ],
             ),
           ],
         ),

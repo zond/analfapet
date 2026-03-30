@@ -93,25 +93,71 @@ void _checkUrlFragment() {
       final jsonStr = Uri.decodeComponent(encoded);
       final data = (jsonDecode(jsonStr) as Map).cast<String, dynamic>();
       print('[Notification] Opened from URL fragment: ${data['type']}');
-      // Clear the fragment so it doesn't trigger again on refresh
       web.window.history.replaceState(''.toJS, '', web.window.location.pathname);
-      // Wait for the navigator to initialize
       _waitForNavigatorAndHandle(data);
     } catch (e) {
       print('[Notification] Failed to parse URL fragment: $e');
+    }
+  } else if (hash.startsWith('#friend=')) {
+    try {
+      final encoded = hash.substring('#friend='.length);
+      final jsonStr = Uri.decodeComponent(encoded);
+      final data = (jsonDecode(jsonStr) as Map).cast<String, dynamic>();
+      final id = data['id'] as String?;
+      final name = data['name'] as String?;
+      print('[Friend link] id=$id name=$name');
+      web.window.history.replaceState(''.toJS, '', web.window.location.pathname);
+      if (id != null && id != playerIdentity.uuid) {
+        _waitForNavigatorThen(() => _handleFriendLink(id, name));
+      }
+    } catch (e) {
+      print('[Friend link] Failed to parse URL fragment: $e');
     }
   }
 }
 
 Future<void> _waitForNavigatorAndHandle(Map<String, dynamic> data) async {
+  await _waitForNavigatorThen(() => _handleNotificationClick(data));
+}
+
+Future<void> _waitForNavigatorThen(void Function() action) async {
   for (var i = 0; i < 50; i++) {
     if (navigatorKey.currentState != null) {
-      _handleNotificationClick(data);
+      action();
       return;
     }
     await Future.delayed(const Duration(milliseconds: 100));
   }
-  print('[Notification] Navigator not ready after 5 seconds, giving up');
+  print('[Nav] Navigator not ready after 5 seconds, giving up');
+}
+
+void _handleFriendLink(String id, String? name) {
+  final nav = navigatorKey.currentState;
+  if (nav == null) return;
+
+  if (name != null && name.isNotEmpty) {
+    // Auto-add and navigate to friends screen
+    FriendsService().add(Friend(id: id, name: name)).then((_) {
+      FriendsService().sendFriendRequest(
+        fcmService, playerIdentity.uuid, playerIdentity.name ?? 'Anon', id,
+      );
+    });
+    _showToast('Added $name as a friend');
+    nav.push(MaterialPageRoute(
+      builder: (_) => FriendsScreen(
+        identity: playerIdentity,
+        fcmService: fcmService,
+      ),
+    ));
+  } else {
+    // Navigate to friends screen — they can scan or add manually
+    nav.push(MaterialPageRoute(
+      builder: (_) => FriendsScreen(
+        identity: playerIdentity,
+        fcmService: fcmService,
+      ),
+    ));
+  }
 }
 
 Future<void> _handleFriendRequest(Map<String, dynamic> data) async {
