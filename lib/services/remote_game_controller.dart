@@ -251,6 +251,25 @@ class RemoteGameController extends ChangeNotifier {
 
     // Track whether anything actually changed (Fix #15)
     bool anythingChanged = false;
+    final wasActive = game.status == RemoteGameStatus.active;
+
+    // If incoming has all-accepted players, adopt their list directly
+    // (it's sorted by UUID from finalization — authoritative order)
+    final allIncomingAccepted = incomingPlayers.every((p) => p.accepted || p.denied);
+    if (allIncomingAccepted && incomingPlayers.length >= 2) {
+      // Check if player list differs from ours
+      final incomingUuids = incomingPlayers.where((p) => p.accepted).map((p) => p.uuid).toList();
+      final localUuids = game.players.map((p) => p.uuid).toList();
+      if (incomingUuids.join(',') != localUuids.join(',')) {
+        // Adopt the incoming player list
+        game.players
+          ..clear()
+          ..addAll(incomingPlayers.where((p) => p.accepted));
+        game.players.sort((a, b) => a.uuid.compareTo(b.uuid));
+        game.status = RemoteGameStatus.active;
+        anythingChanged = true;
+      }
+    }
 
     // Update player statuses from incoming
     for (final incoming in incomingPlayers) {
@@ -259,7 +278,6 @@ class RemoteGameController extends ChangeNotifier {
         orElse: () => null,
       );
       if (local != null) {
-        // Accept trumps pending; denied trumps all
         if (incoming.denied) {
           if (!local.denied) anythingChanged = true;
           local.denied = true;
@@ -271,7 +289,7 @@ class RemoteGameController extends ChangeNotifier {
       }
     }
 
-    // Handle denied players: remove them (Fix #1: skip if game is active)
+    // Handle denied players: remove them (skip if game is active)
     final deniedPlayers = game.players.where((p) => p.denied).toList();
     if (game.status != RemoteGameStatus.active) {
       for (final denied in deniedPlayers) {
@@ -289,10 +307,9 @@ class RemoteGameController extends ChangeNotifier {
     }
 
     // Check if all remaining players have accepted
-    final wasActive = game.status == RemoteGameStatus.active;
-    if (game.allAccepted) {
+    if (game.allAccepted && game.status != RemoteGameStatus.active) {
       _finalizeGame(game);
-      if (!wasActive) anythingChanged = true;
+      anythingChanged = true;
     }
 
     // Merge moves: accept if incoming has more and they validate
