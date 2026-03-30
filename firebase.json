@@ -1,1 +1,20 @@
-{"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"fcm-switch","configurations":{"web":"1:245672555479:web:01dd2824ac0ff9e94e9192"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fcm-switch",
+          "configurations": {
+            "web": "1:245672555479:web:01dd2824ac0ff9e94e9192"
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "database": {
+    "rules": "database.rules.json"
+  }
+}

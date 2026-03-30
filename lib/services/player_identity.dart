@@ -4,7 +4,9 @@ import 'package:uuid/uuid.dart';
 class PlayerIdentity {
   static const _uuidKey = 'player_uuid';
   static const _nameKey = 'player_name';
+  static const _secretKey = 'player_secret';
   late final String uuid;
+  late final String secret;
   String? _name;
 
   String? get name => _name;
@@ -12,7 +14,8 @@ class PlayerIdentity {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    uuid = prefs.getString(_uuidKey) ?? await _generateUuid(prefs);
+    uuid = prefs.getString(_uuidKey) ?? await _generate(prefs, _uuidKey);
+    secret = prefs.getString(_secretKey) ?? await _generate(prefs, _secretKey);
     _name = prefs.getString(_nameKey);
   }
 
@@ -22,9 +25,9 @@ class PlayerIdentity {
     await prefs.setString(_nameKey, name);
   }
 
-  Future<String> _generateUuid(SharedPreferences prefs) async {
+  Future<String> _generate(SharedPreferences prefs, String key) async {
     final id = const Uuid().v4();
-    await prefs.setString(_uuidKey, id);
+    await prefs.setString(key, id);
     return id;
   }
 }

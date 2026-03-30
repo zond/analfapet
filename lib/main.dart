@@ -21,7 +21,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await playerIdentity.init();
-  await fcmService.init(playerIdentity.uuid);
+  await fcmService.init(playerIdentity.uuid, playerIdentity.secret);
 
   remoteGameController = RemoteGameController(
     fcm: fcmService,
@@ -31,24 +31,14 @@ void main() async {
   );
   await remoteGameController.load();
 
-  // Route incoming messages (both FCM push and Firestore inbox)
-  void handleIncoming(Map<String, dynamic> data) async {
+  // Route incoming FCM messages
+  fcmService.onMessageHandler((data) async {
     print('[MSG] Received: ${data['type']}');
     final type = data['type'] as String?;
     if (type == 'friendRequest') {
       await _handleFriendRequest(data);
     } else {
       await remoteGameController.handleMessage(data);
-    }
-  }
-
-  // Listen for FCM push messages (when supported)
-  fcmService.onMessageHandler(handleIncoming);
-
-  // Listen for Firestore inbox messages (the actual relay)
-  fcmService.listenForMoves(playerIdentity.uuid).listen((messages) {
-    for (final data in messages) {
-      handleIncoming(data);
     }
   });
 
