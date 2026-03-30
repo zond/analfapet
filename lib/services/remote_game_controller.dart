@@ -5,8 +5,10 @@ import '../models/fcm_message.dart';
 import '../models/game_state.dart';
 import '../models/move.dart';
 import '../models/remote_game.dart';
+import 'dictionary.dart';
 import 'fcm_service.dart';
 import 'friends_service.dart';
+import 'move_validator.dart';
 import 'player_identity.dart';
 import 'remote_game_service.dart';
 
@@ -15,6 +17,8 @@ class RemoteGameController extends ChangeNotifier {
   final RemoteGameService storage;
   final String myId;
   final PlayerIdentity identity;
+  final Dictionary dictionary;
+  late final MoveValidator _validator;
 
   String get myName => identity.name ?? 'Anonymous';
 
@@ -33,7 +37,10 @@ class RemoteGameController extends ChangeNotifier {
     required this.storage,
     required this.myId,
     required this.identity,
-  });
+    required this.dictionary,
+  }) {
+    _validator = MoveValidator(dictionary);
+  }
 
   Future<void> load() async {
     _games = await storage.loadAll();
@@ -270,6 +277,33 @@ class RemoteGameController extends ChangeNotifier {
     await _save(game);
   }
 
+  /// Validate a move against the current game state.
+  /// Returns null if valid, or an error string if invalid.
+  String? _validateMove(RemoteGame game, Move move) {
+    final state = GameState.replayFromMoves(
+      gameId: game.gameId,
+      playerCount: game.players.length,
+      seed: game.seed,
+      moves: game.moves,
+    );
+
+    // Verify board hash matches
+    if (move.boardHash != state.board.computeHash()) {
+      return 'Board hash mismatch (desync)';
+    }
+
+    // Validate play moves against dictionary and rules
+    if (move.type == MoveType.play) {
+      final isFirstMove = state.board.isEmptyBoard;
+      final result = _validator.validate(state.board, move.placements, isFirstMove);
+      if (!result.valid) {
+        return result.error;
+      }
+    }
+
+    return null;
+  }
+
   Future<void> _handleMove(FcmGameMessage msg) async {
     final game = _games.cast<RemoteGame?>().firstWhere(
           (g) => g!.gameId == msg.gameId,
@@ -280,6 +314,12 @@ class RemoteGameController extends ChangeNotifier {
     final move = msg.move!;
     // Only append if it's the next expected move
     if (move.turnSeqNr == game.moves.length) {
+      // Validate the move
+      final error = _validateMove(game, move);
+      if (error != null) {
+        print('[Game] Rejected move from ${msg.senderName}: $error');
+        return;
+      }
       game.moves.add(move);
       await _save(game);
     } else if (move.turnSeqNr > game.moves.length) {
@@ -333,8 +373,37 @@ class RemoteGameController extends ChangeNotifier {
 
     // Accept if incoming has more moves
     if (msg.moves != null && msg.moves!.length > game.moves.length) {
+      // Validate the new moves by replaying from our known-good state
+      final newMoves = msg.moves!;
+
+      // Verify our existing moves are a prefix of the incoming moves
+      for (var i = 0; i < game.moves.length; i++) {
+        if (game.moves[i].turnSeqNr != newMoves[i].turnSeqNr) {
+          print('[Game] State sync rejected: move history diverged at index $i');
+          return null;
+        }
+      }
+
+      // Validate each new move beyond what we already have
+      final tempGame = RemoteGame(
+        gameId: game.gameId,
+        seed: game.seed,
+        players: game.players,
+        creatorId: game.creatorId,
+        status: game.status,
+        moves: List.of(game.moves),
+      );
+      for (var i = game.moves.length; i < newMoves.length; i++) {
+        final error = _validateMove(tempGame, newMoves[i]);
+        if (error != null) {
+          print('[Game] State sync rejected: move $i invalid — $error');
+          return null;
+        }
+        tempGame.moves.add(newMoves[i]);
+      }
+
       game.moves.clear();
-      game.moves.addAll(msg.moves!);
+      game.moves.addAll(newMoves);
       await _save(game);
       return 'Game updated from ${msg.senderName}';
     }

@@ -44,6 +44,7 @@ void main() async {
     storage: RemoteGameService(),
     myId: playerIdentity.uuid,
     identity: playerIdentity,
+    dictionary: dictionary,
   );
   await remoteGameController.load();
 
