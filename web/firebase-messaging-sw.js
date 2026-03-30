@@ -48,3 +48,27 @@ messaging.onBackgroundMessage((payload) => {
     data: payload.data,
   });
 });
+
+// When user clicks a notification, focus the tab and forward the data
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Try to focus an existing tab
+      for (const client of clientList) {
+        if (client.url.includes('analfapet') && 'focus' in client) {
+          client.focus();
+          // Forward the message data so the app can process it
+          if (data) client.postMessage({ type: 'notification-click', data: data });
+          return;
+        }
+      }
+      // No existing tab — open a new one
+      if (clients.openWindow) {
+        return clients.openWindow('./');
+      }
+    })
+  );
+});

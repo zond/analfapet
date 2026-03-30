@@ -1,10 +1,13 @@
 import 'dart:math';
+import 'dart:js_interop';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:web/web.dart' as web;
 import 'firebase_options.dart';
 import 'models/game_state.dart';
 import 'screens/friends_screen.dart';
 import 'screens/game_screen.dart';
+import 'screens/remote_game_screen.dart';
 import 'services/dictionary.dart';
 import 'screens/remote_games_screen.dart';
 import 'services/friends_service.dart';
@@ -17,6 +20,8 @@ final playerIdentity = PlayerIdentity();
 final fcmService = FcmService();
 late final RemoteGameController remoteGameController;
 final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final navigatorKey = GlobalKey<NavigatorState>();
+late final Dictionary dictionary;
 
 void _showToast(String message) {
   scaffoldMessengerKey.currentState?.showSnackBar(
@@ -29,6 +34,9 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await playerIdentity.init();
   await fcmService.init(playerIdentity.uuid, playerIdentity.secret);
+
+  dictionary = Dictionary();
+  await dictionary.load();
 
   remoteGameController = RemoteGameController(
     fcm: fcmService,
@@ -66,6 +74,22 @@ void main() async {
     }
   });
 
+  // Listen for notification clicks from service worker
+  web.window.navigator.serviceWorker.addEventListener(
+    'message',
+    ((web.MessageEvent event) {
+      final jsData = event.data;
+      if (jsData == null) return;
+      final map = (jsData as JSObject).dartify();
+      if (map is! Map) return;
+      final type = map['type'];
+      if (type == 'notification-click') {
+        final data = (map['data'] as Map).cast<String, dynamic>();
+        _handleNotificationClick(data);
+      }
+    }).toJS,
+  );
+
   runApp(const AnalfapetApp());
 }
 
@@ -76,12 +100,50 @@ Future<void> _handleFriendRequest(Map<String, dynamic> data) async {
   print('[Friends] Auto-added $senderName ($senderId) from friend request');
 }
 
+void _handleNotificationClick(Map<String, dynamic> data) {
+  final nav = navigatorKey.currentState;
+  if (nav == null) return;
+
+  final type = data['type'] as String?;
+  final gameId = data['gameId'] as String?;
+
+  switch (type) {
+    case 'friendRequest':
+      nav.push(MaterialPageRoute(
+        builder: (_) => FriendsScreen(
+          identity: playerIdentity,
+          fcmService: fcmService,
+        ),
+      ));
+    case 'invite' || 'accept' || 'deny':
+      nav.push(MaterialPageRoute(
+        builder: (_) => RemoteGamesScreen(
+          controller: remoteGameController,
+          dictionary: dictionary,
+          myId: playerIdentity.uuid,
+        ),
+      ));
+    case 'move' || 'hurry' || 'stateSync':
+      if (gameId != null) {
+        nav.push(MaterialPageRoute(
+          builder: (_) => RemoteGameScreen(
+            gameId: gameId,
+            controller: remoteGameController,
+            dictionary: dictionary,
+            myId: playerIdentity.uuid,
+          ),
+        ));
+      }
+  }
+}
+
 class AnalfapetApp extends StatelessWidget {
   const AnalfapetApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       scaffoldMessengerKey: scaffoldMessengerKey,
       title: 'Analfapet',
       debugShowCheckedModeBanner: false,
@@ -94,63 +156,32 @@ class AnalfapetApp extends StatelessWidget {
   }
 }
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  Dictionary? _dictionary;
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDictionary();
-  }
-
-  Future<void> _loadDictionary() async {
-    try {
-      final dict = Dictionary();
-      await dict.load();
-      setState(() {
-        _dictionary = dict;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to load dictionary: $e';
-        _loading = false;
-      });
-    }
-  }
-
-  void _openLocalGame() {
+  void _openLocalGame(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _PlayerCountScreen(dictionary: _dictionary!),
+        builder: (_) => _PlayerCountScreen(dictionary: dictionary),
       ),
     );
   }
 
-  void _openRemoteGames() {
+  void _openRemoteGames(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => RemoteGamesScreen(
           controller: remoteGameController,
-          dictionary: _dictionary!,
+          dictionary: dictionary,
           myId: playerIdentity.uuid,
         ),
       ),
     );
   }
 
-  void _openFriends() {
+  void _openFriends(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => FriendsScreen(
@@ -165,18 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1B5E20),
       body: Center(
-        child: _loading
-            ? const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: Colors.greenAccent),
-                  SizedBox(height: 16),
-                  Text('Loading dictionary...', style: TextStyle(color: Colors.white70)),
-                ],
-              )
-            : _error != null
-                ? Text(_error!, style: const TextStyle(color: Colors.redAccent))
-                : Column(
+        child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
@@ -190,24 +210,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '${_dictionary!.wordCount} ord',
+                        '${dictionary.wordCount} ord',
                         style: const TextStyle(color: Colors.white54),
                       ),
                       const SizedBox(height: 48),
                       _MenuButton(
-                        onPressed: _openLocalGame,
+                        onPressed: () => _openLocalGame(context),
                         icon: Icons.people,
                         label: 'Local game',
                       ),
                       const SizedBox(height: 12),
                       _MenuButton(
-                        onPressed: _openRemoteGames,
+                        onPressed: () => _openRemoteGames(context),
                         icon: Icons.wifi,
                         label: 'Remote games',
                       ),
                       const SizedBox(height: 12),
                       _MenuButton(
-                        onPressed: _openFriends,
+                        onPressed: () => _openFriends(context),
                         icon: Icons.group,
                         label: 'Friends',
                       ),
