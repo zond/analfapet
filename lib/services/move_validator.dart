@@ -144,6 +144,69 @@ class MoveValidator {
     return MoveValidationResult(valid: true, wordsFormed: words, score: totalScore);
   }
 
+  /// Compute the score for placements without validating words.
+  /// Returns 0 if placements are invalid (not in a line, not contiguous, etc.)
+  int computeScore(Board board, List<TilePlacement> placements) {
+    if (placements.isEmpty) return 0;
+
+    // Check all on empty cells
+    for (final p in placements) {
+      if (!board.isEmpty(p.row, p.col)) return 0;
+      if (p.row < 0 || p.row >= Board.size || p.col < 0 || p.col >= Board.size) return 0;
+    }
+
+    final rows = placements.map((p) => p.row).toSet();
+    final cols = placements.map((p) => p.col).toSet();
+    final isHorizontal = rows.length == 1;
+    final isVertical = cols.length == 1;
+    if (!isHorizontal && !isVertical) return 0;
+
+    // Place tiles on temp board
+    final tempBoard = Board.from(board);
+    for (final p in placements) {
+      tempBoard.set(p.row, p.col, p.placedTile);
+    }
+
+    // Check contiguity
+    if (isHorizontal) {
+      final row = placements.first.row;
+      final minCol = cols.reduce((a, b) => a < b ? a : b);
+      final maxCol = cols.reduce((a, b) => a > b ? a : b);
+      for (var c = minCol; c <= maxCol; c++) {
+        if (tempBoard.isEmpty(row, c)) return 0;
+      }
+    } else {
+      final col = placements.first.col;
+      final minRow = rows.reduce((a, b) => a < b ? a : b);
+      final maxRow = rows.reduce((a, b) => a > b ? a : b);
+      for (var r = minRow; r <= maxRow; r++) {
+        if (tempBoard.isEmpty(r, col)) return 0;
+      }
+    }
+
+    final newTilePositions = {for (final p in placements) (p.row, p.col)};
+    var totalScore = 0;
+
+    final mainWord = isHorizontal
+        ? _getWordAt(tempBoard, placements.first.row, placements.first.col, true)
+        : _getWordAt(tempBoard, placements.first.row, placements.first.col, false);
+    if (mainWord != null && mainWord.word.length > 1) {
+      totalScore += _scoreWord(tempBoard, mainWord, newTilePositions);
+    }
+
+    for (final p in placements) {
+      final crossWord = isHorizontal
+          ? _getWordAt(tempBoard, p.row, p.col, false)
+          : _getWordAt(tempBoard, p.row, p.col, true);
+      if (crossWord != null && crossWord.word.length > 1) {
+        totalScore += _scoreWord(tempBoard, crossWord, newTilePositions);
+      }
+    }
+
+    if (placements.length == 7) totalScore += 40;
+    return totalScore;
+  }
+
   bool _hasAdjacentTile(Board board, int row, int col) {
     const dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)];
     for (final (dr, dc) in dirs) {

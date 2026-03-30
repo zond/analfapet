@@ -693,8 +693,20 @@ class _GameScreenState extends State<GameScreen> {
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Text(_scoreText,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_pendingPlacements.isNotEmpty) ...[
+                        Text(
+                          '+${_validator.computeScore(game.board, _pendingPlacements)}',
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Text(_scoreText,
+                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 4),
                 TileRackWidget(
