@@ -54,12 +54,26 @@ type sendRequest struct {
 	Data       map[string]string `json:"data"`
 }
 
+func cors(w http.ResponseWriter, r *http.Request) bool {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return true
+	}
+	return false
+}
+
 func init() {
 	functions.HTTP("Register", handleRegister)
 	functions.HTTP("Send", handleSend)
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
+	if cors(w, r) {
+		return
+	}
 	initClients()
 
 	if r.Method != http.MethodPost {
@@ -110,6 +124,9 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSend(w http.ResponseWriter, r *http.Request) {
+	if cors(w, r) {
+		return
+	}
 	initClients()
 
 	if r.Method != http.MethodPost {
