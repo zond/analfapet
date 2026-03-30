@@ -145,32 +145,58 @@ Future<void> _waitForNavigatorThen(void Function() action) async {
   print('[Nav] Navigator not ready after 5 seconds, giving up');
 }
 
-void _handleFriendLink(String id, String? name) {
+void _handleFriendLink(String id, String? name) async {
   final nav = navigatorKey.currentState;
   if (nav == null) return;
 
+  // Ensure we have a name before sending the friend request back
+  if (!playerIdentity.hasName) {
+    final context = nav.context;
+    final controller = TextEditingController();
+    final chosenName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('What\'s your name?'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Your name'),
+          autofocus: true,
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              final v = controller.text.trim();
+              Navigator.pop(context, v.isNotEmpty ? v : 'Anon');
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    await playerIdentity.setName((chosenName != null && chosenName.isNotEmpty) ? chosenName : 'Anon');
+  }
+
   if (name != null && name.isNotEmpty) {
     // Auto-add and navigate to friends screen
-    FriendsService().add(Friend(id: id, name: name)).then((_) {
-      FriendsService().sendFriendRequest(
-        fcmService, playerIdentity.uuid, playerIdentity.name ?? 'Anon', id,
-      );
-    });
+    await FriendsService().add(Friend(id: id, name: name));
+    await FriendsService().sendFriendRequest(
+      fcmService, playerIdentity.uuid, playerIdentity.name ?? 'Anon', id,
+    );
     _showToast('Added $name as a friend');
-    nav.push(MaterialPageRoute(
+    nav.pushAndRemoveUntil(MaterialPageRoute(
       builder: (_) => FriendsScreen(
         identity: playerIdentity,
         fcmService: fcmService,
       ),
-    ));
+    ), (r) => r.isFirst);
   } else {
-    // Navigate to friends screen — they can scan or add manually
-    nav.push(MaterialPageRoute(
+    nav.pushAndRemoveUntil(MaterialPageRoute(
       builder: (_) => FriendsScreen(
         identity: playerIdentity,
         fcmService: fcmService,
       ),
-    ));
+    ), (r) => r.isFirst);
   }
 }
 
