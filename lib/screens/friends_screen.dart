@@ -5,17 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../services/fcm_service.dart';
 import '../services/friends_service.dart';
+import '../services/player_identity.dart';
 import 'qr_scanner_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
-  final String playerId;
-  final String playerName;
+  final PlayerIdentity identity;
   final FcmService fcmService;
 
   const FriendsScreen({
     super.key,
-    required this.playerId,
-    required this.playerName,
+    required this.identity,
     required this.fcmService,
   });
 
@@ -26,20 +25,29 @@ class FriendsScreen extends StatefulWidget {
 class _FriendsScreenState extends State<FriendsScreen> {
   final _friendsService = FriendsService();
   List<Friend> _friends = [];
+  bool _loading = true;
+
+  PlayerIdentity get _identity => widget.identity;
 
   Future<void> _addAndNotify(Friend friend) async {
     await _friendsService.add(friend);
     await _friendsService.sendFriendRequest(
-      widget.fcmService, widget.playerId, widget.playerName, friend.id,
+      widget.fcmService, _identity.uuid, _identity.name!, friend.id,
     );
     await _load();
   }
-  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _load();
+    if (!_identity.hasName && mounted) {
+      await _promptForName();
+    }
   }
 
   Future<void> _load() async {
@@ -50,8 +58,42 @@ class _FriendsScreenState extends State<FriendsScreen> {
     });
   }
 
+  Future<void> _promptForName() async {
+    final controller = TextEditingController(text: _identity.name ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('What\'s your name?'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Your name'),
+          autofocus: true,
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              final v = controller.text.trim();
+              if (v.isNotEmpty) Navigator.pop(context, v);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (name != null && name.isNotEmpty) {
+      await _identity.setName(name);
+      setState(() {});
+    }
+  }
+
+  void _editName() async {
+    await _promptForName();
+  }
+
   void _showMyQR() {
-    final data = jsonEncode({'id': widget.playerId});
+    final data = jsonEncode({'id': _identity.uuid, 'name': _identity.name});
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -70,13 +112,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
             ),
             const SizedBox(height: 12),
             SelectableText(
-              widget.playerId,
+              _identity.uuid,
               style: const TextStyle(fontSize: 12, color: Colors.white54),
             ),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: widget.playerId));
+                Clipboard.setData(ClipboardData(text: _identity.uuid));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('ID copied')),
                 );
@@ -103,17 +145,18 @@ class _FriendsScreenState extends State<FriendsScreen> {
     );
     if (result == null || !mounted) return;
 
-    // Try to parse as JSON with id field, or use raw string as id
     String? id;
+    String? name;
     try {
       final parsed = jsonDecode(result) as Map<String, dynamic>;
       id = parsed['id'] as String?;
+      name = parsed['name'] as String?;
     } catch (_) {
       id = result.trim();
     }
 
     if (id == null || id.isEmpty) return;
-    if (id == widget.playerId) {
+    if (id == _identity.uuid) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("That's your own ID")),
@@ -122,50 +165,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
       return;
     }
 
-    _showAddFriendDialog(id);
-  }
-
-  void _addManually() {
-    final nameController = TextEditingController();
-    final idController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add friend manually'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Name'),
-              autofocus: true,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: idController,
-              decoration: const InputDecoration(labelText: 'Player ID'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              final id = idController.text.trim();
-              if (name.isNotEmpty && id.isNotEmpty) {
-                await _addAndNotify(Friend(id: id, name: name));
-                if (context.mounted) Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
+    if (name != null && name.isNotEmpty) {
+      await _addAndNotify(Friend(id: id, name: name));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Added $name')),
+        );
+      }
+    } else {
+      _showAddFriendDialog(id);
+    }
   }
 
   void _showAddFriendDialog(String id) {
@@ -232,10 +241,15 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final title = _identity.hasName ? 'Friends of ${_identity.name}' : 'Friends';
+
     return Scaffold(
       backgroundColor: const Color(0xFF1B5E20),
       appBar: AppBar(
-        title: const Text('Friends'),
+        title: GestureDetector(
+          onTap: _editName,
+          child: Text(title),
+        ),
         backgroundColor: const Color(0xFF2E7D32),
         foregroundColor: Colors.white,
         actions: [
@@ -268,12 +282,6 @@ class _FriendsScreenState extends State<FriendsScreen> {
                         onPressed: _scanQR,
                         icon: const Icon(Icons.qr_code_scanner),
                         label: const Text('Scan QR code'),
-                      ),
-                      const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: _addManually,
-                        icon: const Icon(Icons.edit, size: 18),
-                        label: const Text('Add manually'),
                       ),
                     ],
                   ),

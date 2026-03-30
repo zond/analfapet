@@ -6,13 +6,16 @@ import '../models/move.dart';
 import '../models/remote_game.dart';
 import 'fcm_service.dart';
 import 'friends_service.dart';
+import 'player_identity.dart';
 import 'remote_game_service.dart';
 
 class RemoteGameController extends ChangeNotifier {
   final FcmService fcm;
   final RemoteGameService storage;
   final String myId;
-  final String myName;
+  final PlayerIdentity identity;
+
+  String get myName => identity.name ?? 'Anonymous';
 
   List<RemoteGame> _games = [];
   List<RemoteGame> get games => _games;
@@ -28,7 +31,7 @@ class RemoteGameController extends ChangeNotifier {
     required this.fcm,
     required this.storage,
     required this.myId,
-    required this.myName,
+    required this.identity,
   });
 
   Future<void> load() async {

@@ -27,7 +27,7 @@ void main() async {
     fcm: fcmService,
     storage: RemoteGameService(),
     myId: playerIdentity.uuid,
-    myName: 'Me', // TODO: let user set a display name
+    identity: playerIdentity,
   );
   await remoteGameController.load();
 
@@ -127,8 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => FriendsScreen(
-        playerId: playerIdentity.uuid,
-        playerName: 'Me',
+        identity: playerIdentity,
         fcmService: fcmService,
       )),
     );
