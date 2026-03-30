@@ -53,6 +53,9 @@ class _GameScreenState extends State<GameScreen> {
   int? _dragFromRackIndex;
   Offset _dragPosition = Offset.zero;
 
+  // User's rack arrangement (may differ from GameState order)
+  List<Tile>? _userRackOrder;
+
   // Hit testing
   final GlobalKey _boardKey = GlobalKey();
   final GlobalKey _rackKey = GlobalKey();
@@ -63,9 +66,13 @@ class _GameScreenState extends State<GameScreen> {
       ? game.currentPlayer == widget.localPlayerIndex
       : true;
 
-  List<Tile> get _myRack => isRemote
+  /// The underlying GameState rack (live reference).
+  List<Tile> get _gameRack => isRemote
       ? game.racks[widget.localPlayerIndex!]
       : game.currentRack;
+
+  /// The rack as displayed to the user (preserves their arrangement).
+  List<Tile> get _myRack => _userRackOrder ?? _gameRack;
 
   Move? get _lastMove => isRemote ? widget.lastMove : _lastLocalMove;
   int? get _lastMovePlayer => isRemote ? widget.lastMovePlayerIndex : _lastLocalMovePlayer;
@@ -81,6 +88,7 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     _validator = MoveValidator(widget.dictionary);
+    _syncRackWithPending();
   }
 
   @override
@@ -93,29 +101,47 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   /// Ensure the rack and pending placements are consistent with the current GameState.
-  /// The GameState from replay has a full rack. We remove tiles that are in
-  /// _pendingPlacements, and return any placements that conflict with the board.
+  /// Preserves the user's tile arrangement as much as possible.
   void _syncRackWithPending() {
-    // Start from the full rack (as replayed)
-    final fullRack = List<Tile>.from(_myRack);
+    final freshRack = List<Tile>.from(_gameRack);
 
     // Check which pending placements are still valid
     final stillValid = <TilePlacement>[];
     for (final p in _pendingPlacements) {
       if (widget.gameState.board.isEmpty(p.row, p.col)) {
-        // Cell is still free — try to remove this tile from the full rack
-        final rackIdx = fullRack.indexWhere((t) => t == p.placedTile.tile);
+        final rackIdx = freshRack.indexWhere((t) => t == p.placedTile.tile);
         if (rackIdx >= 0) {
-          fullRack.removeAt(rackIdx);
+          freshRack.removeAt(rackIdx);
           stillValid.add(p);
         }
       }
     }
 
-    // Replace rack contents with what's left after removing pending tiles
-    _myRack
+    // freshRack now has the tiles that should be visible in the rack.
+    // Preserve the user's previous arrangement order.
+    final previousOrder = _userRackOrder;
+    if (previousOrder != null) {
+      final remaining = List<Tile>.from(freshRack);
+      final ordered = <Tile>[];
+      // Keep tiles from previous order that still exist
+      for (final tile in previousOrder) {
+        final idx = remaining.indexWhere((t) => t == tile);
+        if (idx >= 0) {
+          ordered.add(remaining.removeAt(idx));
+        }
+      }
+      // Append any new tiles at the end
+      ordered.addAll(remaining);
+      _userRackOrder = ordered;
+    } else {
+      _userRackOrder = freshRack;
+    }
+
+    // Also update the GameState rack to match (for applyMove etc.)
+    _gameRack
       ..clear()
-      ..addAll(fullRack);
+      ..addAll(_userRackOrder!);
+
     _pendingPlacements
       ..clear()
       ..addAll(stillValid);
@@ -129,6 +155,7 @@ class _GameScreenState extends State<GameScreen> {
       _dragFromRackIndex = index;
       _dragPosition = globalPosition;
       _myRack.removeAt(index);
+      _userRackOrder = List.from(_myRack);
     });
   }
 
@@ -180,6 +207,7 @@ class _GameScreenState extends State<GameScreen> {
     setState(() {
       final insertAt = _rackInsertIndex(_dragPosition);
       _myRack.insert(insertAt, _dragTile!);
+      _userRackOrder = List.from(_myRack);
       _dragTile = null;
       _dragFromRackIndex = null;
     });
@@ -203,6 +231,7 @@ class _GameScreenState extends State<GameScreen> {
       setState(() {
         final removed = _pendingPlacements.removeAt(existingIndex);
         _myRack.add(removed.placedTile.tile);
+        _userRackOrder = List.from(_myRack);
       });
     }
   }
@@ -434,13 +463,14 @@ class _GameScreenState extends State<GameScreen> {
   void _recallTiles() {
     setState(() {
       _pendingPlacements.clear();
-      _syncRackWithPending(); // Restores full rack since no pending left
+      _syncRackWithPending();
     });
   }
 
   void _shuffleRack() {
     setState(() {
       _myRack.shuffle();
+      _userRackOrder = List.from(_myRack);
     });
   }
 
