@@ -255,16 +255,20 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
   }
 
   Widget _gameTile(RemoteGame game) {
-    return Dismissible(
-      key: Key(game.gameId),
-      onDismissed: (_) => _deleteGame(game),
-      background: Container(color: Colors.red),
-      child: ListTile(
-        title: Text(_gameSubtitle(game), style: const TextStyle(color: Colors.white)),
-        subtitle: Text(_gameStatus(game), style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        trailing: const Icon(Icons.chevron_right, color: Colors.white38),
-        onTap: () => _openGame(game),
+    return ListTile(
+      title: Text(_gameSubtitle(game), style: const TextStyle(color: Colors.white)),
+      subtitle: Text(_gameStatus(game), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.white38),
+            onPressed: () => _deleteGame(game),
+          ),
+          const Icon(Icons.chevron_right, color: Colors.white38),
+        ],
       ),
+      onTap: () => _openGame(game),
     );
   }
 }
