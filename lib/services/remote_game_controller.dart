@@ -47,6 +47,43 @@ class RemoteGameController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Get accepted players sorted by UUID (the canonical game order).
+  List<RemotePlayer> _sortedAccepted(RemoteGame game) {
+    final accepted = game.players.where((p) => p.accepted).toList();
+    accepted.sort((a, b) => a.uuid.compareTo(b.uuid));
+    return accepted;
+  }
+
+  /// Finalize the game: keep only accepted players, sort by UUID, activate.
+  /// Idempotent — safe to call multiple times.
+  void _finalizeGame(RemoteGame game) {
+    final sorted = _sortedAccepted(game);
+    game.players
+      ..clear()
+      ..addAll(sorted);
+    game.status = RemoteGameStatus.active;
+  }
+
+  /// Sync player list from an incoming message.
+  /// If the message includes playerIds, adopt that list (sorted by UUID).
+  void _syncPlayers(RemoteGame game, FcmGameMessage msg) {
+    if (msg.playerIds != null && msg.playerNames != null) {
+      final incoming = <RemotePlayer>[];
+      for (var i = 0; i < msg.playerIds!.length; i++) {
+        incoming.add(RemotePlayer(
+          uuid: msg.playerIds![i],
+          name: msg.playerNames![i],
+          accepted: true,
+        ));
+      }
+      incoming.sort((a, b) => a.uuid.compareTo(b.uuid));
+      game.players
+        ..clear()
+        ..addAll(incoming);
+      game.status = RemoteGameStatus.active;
+    }
+  }
+
   Future<void> _save(RemoteGame game) async {
     game.updatedAt = DateTime.now();
     await storage.save(game);
@@ -73,11 +110,12 @@ class RemoteGameController extends ChangeNotifier {
     );
 
     if (game.allAccepted) {
-      game.status = RemoteGameStatus.active;
+      _finalizeGame(game);
     }
 
     await _save(game);
 
+    // Invite includes ALL players (not just accepted) so invitees know the full list
     final msg = FcmGameMessage(
       type: FcmMessageType.invite,
       gameId: gameId,
@@ -103,15 +141,19 @@ class RemoteGameController extends ChangeNotifier {
     me.accepted = true;
     game.status = RemoteGameStatus.accepted;
     if (game.allAccepted) {
-      game.status = RemoteGameStatus.active;
+      _finalizeGame(game);
     }
     await _save(game);
 
+    // Include all accepted players sorted by UUID so others can sync
+    final accepted = _sortedAccepted(game);
     final msg = FcmGameMessage(
       type: FcmMessageType.accept,
       gameId: gameId,
       senderId: myId,
       senderName: myName,
+      playerIds: accepted.map((p) => p.uuid).toList(),
+      playerNames: accepted.map((p) => p.name).toList(),
     );
     await fcm.broadcast(
       game.players.map((p) => p.uuid).toList(),
@@ -149,6 +191,8 @@ class RemoteGameController extends ChangeNotifier {
       senderId: myId,
       senderName: myName,
       move: move,
+      playerIds: game.players.map((p) => p.uuid).toList(),
+      playerNames: game.players.map((p) => p.name).toList(),
     );
     await fcm.broadcast(
       game.players.map((p) => p.uuid).toList(),
@@ -176,6 +220,8 @@ class RemoteGameController extends ChangeNotifier {
       senderId: myId,
       senderName: myName,
       moves: game.moves,
+      playerIds: game.players.map((p) => p.uuid).toList(),
+      playerNames: game.players.map((p) => p.name).toList(),
     );
     await fcm.broadcast(
       game.players.map((p) => p.uuid).toList(),
@@ -245,14 +291,27 @@ class RemoteGameController extends ChangeNotifier {
         );
     if (game == null) return;
 
+    // Mark the sender as accepted
     final player = game.players.cast<RemotePlayer?>().firstWhere(
           (p) => p!.uuid == msg.senderId,
           orElse: () => null,
         );
     if (player != null) player.accepted = true;
 
+    // Also mark any other accepted players from the message
+    // (in case we missed earlier accept FCMs)
+    if (msg.playerIds != null) {
+      for (final id in msg.playerIds!) {
+        final p = game.players.cast<RemotePlayer?>().firstWhere(
+              (p) => p!.uuid == id,
+              orElse: () => null,
+            );
+        if (p != null) p.accepted = true;
+      }
+    }
+
     if (game.allAccepted) {
-      game.status = RemoteGameStatus.active;
+      _finalizeGame(game);
     }
     await _save(game);
   }
@@ -268,11 +327,9 @@ class RemoteGameController extends ChangeNotifier {
     game.players.removeWhere((p) => p.uuid == msg.senderId);
 
     if (game.players.length <= 1) {
-      // Not enough players remaining — cancel the game
       game.status = RemoteGameStatus.finished;
     } else if (game.allAccepted) {
-      // All remaining players have accepted — start the game
-      game.status = RemoteGameStatus.active;
+      _finalizeGame(game);
     }
     await _save(game);
   }
@@ -311,6 +368,8 @@ class RemoteGameController extends ChangeNotifier {
         );
     if (game == null) return;
 
+    // Sync player list from the message (handles missed accepts)
+    _syncPlayers(game, msg);
     final move = msg.move!;
     // Only append if it's the next expected move
     if (move.turnSeqNr == game.moves.length) {
@@ -370,6 +429,9 @@ class RemoteGameController extends ChangeNotifier {
           orElse: () => null,
         );
     if (game == null) return null;
+
+    // Sync player list from the message (handles missed accepts)
+    _syncPlayers(game, msg);
 
     // Accept if incoming has more moves
     if (msg.moves != null && msg.moves!.length > game.moves.length) {
