@@ -137,8 +137,27 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
     await ctrl.denyInvite(game.gameId);
   }
 
-  void _deleteGame(RemoteGame game) async {
-    await ctrl.deleteGame(game.gameId);
+  void _deleteGame(RemoteGame game) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete game'),
+        content: Text('Delete game with ${_gameSubtitle(game)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await ctrl.deleteGame(game.gameId);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   String _gameSubtitle(RemoteGame game) {
