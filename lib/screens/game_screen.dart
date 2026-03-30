@@ -87,7 +87,14 @@ class _GameScreenState extends State<GameScreen> {
   void didUpdateWidget(covariant GameScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(widget.gameState, oldWidget.gameState)) {
-      _pendingPlacements.clear();
+      // Return any pending placements that now conflict with the updated board
+      final conflicting = _pendingPlacements.where(
+        (p) => !widget.gameState.board.isEmpty(p.row, p.col),
+      ).toList();
+      for (final p in conflicting) {
+        _pendingPlacements.remove(p);
+        _myRack.add(p.placedTile.tile);
+      }
       _dragTile = null;
     }
   }
@@ -104,7 +111,6 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _onBoardTileDragStart(int row, int col, Offset globalPosition) {
-    if (!isMyTurn) return;
     final idx = _pendingPlacements.indexWhere((p) => p.row == row && p.col == col);
     if (idx < 0) return;
     setState(() {
@@ -124,8 +130,7 @@ class _GameScreenState extends State<GameScreen> {
   void _onDragEnd() {
     if (_dragTile == null) return;
 
-    // Only allow placing on board when it's your turn
-    final boardBox = isMyTurn ? _boardKey.currentContext?.findRenderObject() as RenderBox? : null;
+    final boardBox = _boardKey.currentContext?.findRenderObject() as RenderBox?;
     if (boardBox != null) {
       final local = boardBox.globalToLocal(_dragPosition);
       final boardSize = boardBox.size.width;
@@ -171,7 +176,6 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _onCellTap(int row, int col) {
-    if (!isMyTurn) return;
     final existingIndex = _pendingPlacements.indexWhere((p) => p.row == row && p.col == col);
     if (existingIndex >= 0) {
       setState(() {
@@ -593,8 +597,8 @@ class _GameScreenState extends State<GameScreen> {
                       board: _boardWithPending,
                       pendingPlacements: pendingPositions,
                       lastMovePlacements: lastMovePositions,
-                      onCellTap: canInteract ? _onCellTap : null,
-                      onPendingDragStart: canInteract ? _onBoardTileDragStart : null,
+                      onCellTap: _onCellTap,
+                      onPendingDragStart: _onBoardTileDragStart,
                     ),
                   ),
                 ),
