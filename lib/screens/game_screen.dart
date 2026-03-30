@@ -81,6 +81,15 @@ class _GameScreenState extends State<GameScreen> {
     _validator = MoveValidator(widget.dictionary);
   }
 
+  @override
+  void didUpdateWidget(covariant GameScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.gameState, oldWidget.gameState)) {
+      _pendingPlacements.clear();
+      _dragTile = null;
+    }
+  }
+
   // --- Drag handling ---
 
   void _onRackTileDragStart(int index, Offset globalPosition) {

@@ -184,6 +184,9 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
           seed: game.seed,
           moves: game.moves,
         );
+        if (state.gameOver) {
+          return 'Finished — ${game.moves.length} moves';
+        }
         final currentPlayer = game.players[state.currentPlayer];
         final turnName = currentPlayer.uuid == widget.myId ? 'Your' : "${currentPlayer.name}'s";
         return "$turnName turn — ${game.moves.length} moves";
@@ -195,8 +198,10 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
   @override
   Widget build(BuildContext context) {
     final invitations = ctrl.invitations;
-    final active = ctrl.activeGames;
-    final finished = ctrl.finishedGames;
+    final allActive = ctrl.activeGames;
+    final active = allActive.where((g) => !ctrl.isGameOverViaGameplay(g)).toList();
+    final finishedViaGameplay = allActive.where((g) => ctrl.isGameOverViaGameplay(g)).toList();
+    final finished = [...ctrl.finishedGames, ...finishedViaGameplay];
 
     return Scaffold(
       backgroundColor: const Color(0xFF1B5E20),

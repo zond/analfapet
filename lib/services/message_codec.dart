@@ -183,6 +183,9 @@ class MessageCodec {
 
   static void _writeString(BytesBuilder builder, String s) {
     final bytes = utf8.encode(s);
+    if (bytes.length > 255) {
+      throw FormatException('String too long: ${bytes.length} bytes');
+    }
     builder.addByte(bytes.length);
     builder.add(bytes);
   }
@@ -200,10 +203,15 @@ class MessageCodec {
   }
 
   /// Return a short human-readable type string for the service worker.
-  static String notificationType(RemoteGame game, String myId) {
-    // If the game has no moves and not all accepted, it's an invite-like state
-    if (game.moves.isEmpty && !game.allAccepted) return 'invite';
-    return 'move';
+  static String notificationType(RemoteGame game) {
+    // Check if any player newly denied
+    if (game.players.any((p) => p.denied)) return 'deny';
+    // Check if game has moves
+    if (game.moves.isNotEmpty) return 'move';
+    // Check if all accepted
+    if (game.allAccepted) return 'accept';
+    // Otherwise it's an invite
+    return 'invite';
   }
 }
 

@@ -196,23 +196,29 @@ void _handleNotificationClick(Map<String, dynamic> rawData) async {
       final uuid = decoded['uuid'] as String;
       final name = decoded['name'] as String;
       await FriendsService().add(Friend(id: uuid, name: name));
-      nav.push(MaterialPageRoute(
-        builder: (_) => FriendsScreen(
-          identity: playerIdentity,
-          fcmService: fcmService,
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => FriendsScreen(
+            identity: playerIdentity,
+            fcmService: fcmService,
+          ),
         ),
-      ));
+        (r) => r.isFirst,
+      );
     } else if (msgType == 'game') {
       await remoteGameController.handleGameMessage(decoded);
       final gameId = decoded['gameId'] as String;
-      nav.push(MaterialPageRoute(
-        builder: (_) => RemoteGameScreen(
-          gameId: gameId,
-          controller: remoteGameController,
-          dictionary: dictionary,
-          myId: playerIdentity.uuid,
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => RemoteGameScreen(
+            gameId: gameId,
+            controller: remoteGameController,
+            dictionary: dictionary,
+            myId: playerIdentity.uuid,
+          ),
         ),
-      ));
+        (r) => r.isFirst,
+      );
     }
   } catch (e) {
     print('[Notification click] Error processing: $e');

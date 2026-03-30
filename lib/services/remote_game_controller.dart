@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -31,6 +32,19 @@ class RemoteGameController extends ChangeNotifier {
       _games.where((g) => g.status == RemoteGameStatus.active || g.status == RemoteGameStatus.accepted).toList();
   List<RemoteGame> get finishedGames =>
       _games.where((g) => g.status == RemoteGameStatus.finished).toList();
+
+  /// Check if an active game is actually finished via gameplay (game over).
+  bool isGameOverViaGameplay(RemoteGame game) {
+    if (game.status != RemoteGameStatus.active) return false;
+    if (game.moves.isEmpty) return false;
+    final state = GameState.replayFromMoves(
+      gameId: game.gameId,
+      playerCount: game.players.length,
+      seed: game.seed,
+      moves: game.moves,
+    );
+    return state.gameOver;
+  }
 
   RemoteGameController({
     required this.fcm,
@@ -70,13 +84,24 @@ class RemoteGameController extends ChangeNotifier {
     await load();
   }
 
+  // --- Serialized message handling (Fix #18) ---
+
+  Future<void> _pending = Future.value();
+
+  /// Wrap handleGameMessage so concurrent calls are serialized.
+  Future<String?> handleGameMessage(Map<String, dynamic> decoded) {
+    final result = _pending.then((_) => _handleGameMessageImpl(decoded));
+    _pending = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
   // --- Outbound ---
 
   /// Encode the current game state and broadcast to all players.
   Future<void> sendGameState(String gameId) async {
     final game = _games.firstWhere((g) => g.gameId == gameId);
     final base64Data = MessageCodec.encodeGameState(game);
-    final notifType = MessageCodec.notificationType(game, myId);
+    final notifType = MessageCodec.notificationType(game);
     await fcm.broadcast(
       game.players.map((p) => p.uuid).toList(),
       myId,
@@ -148,9 +173,9 @@ class RemoteGameController extends ChangeNotifier {
 
   // --- Inbound ---
 
-  /// Handle an incoming decoded message.
+  /// Handle an incoming decoded message (implementation).
   /// Returns a toast message, or null to suppress the toast.
-  Future<String?> handleGameMessage(Map<String, dynamic> decoded) async {
+  Future<String?> _handleGameMessageImpl(Map<String, dynamic> decoded) async {
     final gameId = decoded['gameId'] as String;
     final seed = decoded['seed'] as int;
     final playersData = decoded['players'] as List<Map<String, dynamic>>;
@@ -189,6 +214,12 @@ class RemoteGameController extends ChangeNotifier {
         creatorId: creator.uuid,
         status: RemoteGameStatus.invited,
       );
+
+      // Fix #8: If all accepted already, finalize before saving
+      if (game.allAccepted) {
+        _finalizeGame(game);
+      }
+
       await _save(game);
       return '$senderName invites you to a game';
     }
@@ -199,6 +230,9 @@ class RemoteGameController extends ChangeNotifier {
     // Determine sender by finding what changed
     senderName = _findSender(game, incomingPlayers, incomingMoves);
 
+    // Track whether anything actually changed (Fix #15)
+    bool anythingChanged = false;
+
     // Update player statuses from incoming
     for (final incoming in incomingPlayers) {
       final local = game.players.cast<RemotePlayer?>().firstWhere(
@@ -208,36 +242,45 @@ class RemoteGameController extends ChangeNotifier {
       if (local != null) {
         // Accept trumps pending; denied trumps all
         if (incoming.denied) {
+          if (!local.denied) anythingChanged = true;
           local.denied = true;
           local.accepted = false;
         } else if (incoming.accepted && !local.accepted) {
+          anythingChanged = true;
           local.accepted = true;
         }
       }
     }
 
-    // Handle denied players: remove them
+    // Handle denied players: remove them (Fix #1: skip if game is active)
     final deniedPlayers = game.players.where((p) => p.denied).toList();
-    for (final denied in deniedPlayers) {
-      game.players.removeWhere((p) => p.uuid == denied.uuid);
-    }
-
-    if (game.players.length <= 1) {
-      game.status = RemoteGameStatus.finished;
-      await _save(game);
-      if (deniedPlayers.isNotEmpty) {
-        return '${deniedPlayers.first.name} declined the invite';
+    if (game.status != RemoteGameStatus.active) {
+      for (final denied in deniedPlayers) {
+        game.players.removeWhere((p) => p.uuid == denied.uuid);
       }
-      return 'Game cancelled';
+
+      if (game.players.length <= 1) {
+        game.status = RemoteGameStatus.finished;
+        await _save(game);
+        if (deniedPlayers.isNotEmpty) {
+          return '${deniedPlayers.first.name} declined the invite';
+        }
+        return 'Game cancelled';
+      }
     }
 
     // Check if all remaining players have accepted
+    final wasActive = game.status == RemoteGameStatus.active;
     if (game.allAccepted) {
       _finalizeGame(game);
+      if (!wasActive) anythingChanged = true;
     }
 
     // Merge moves: accept if incoming has more and they validate
-    if (incomingMoves.length > game.moves.length) {
+    // Fix #7: Only merge moves if game is active
+    bool movesMerged = false;
+    bool movesRejected = false;
+    if (game.status == RemoteGameStatus.active && incomingMoves.length > game.moves.length) {
       // Verify our existing moves are a prefix of the incoming moves
       bool prefixMatch = true;
       for (var i = 0; i < game.moves.length; i++) {
@@ -271,21 +314,39 @@ class RemoteGameController extends ChangeNotifier {
         if (allValid) {
           game.moves.clear();
           game.moves.addAll(incomingMoves);
+          movesMerged = true;
+          anythingChanged = true;
+        } else {
+          movesRejected = true;
         }
+      } else {
+        movesRejected = true;
       }
     }
 
     await _save(game);
 
+    // Fix #3: Auto-reply with current state when we have more moves
+    if (game.status == RemoteGameStatus.active && incomingMoves.length < game.moves.length) {
+      await sendGameState(gameId);
+    }
+
+    // Fix #15: Only return toast if something changed
+    if (!anythingChanged && !movesRejected) return null;
+
+    // Fix #9: Toast for rejected moves
+    if (movesRejected) {
+      return 'Invalid game state received from $senderName';
+    }
+
     // Generate appropriate toast
-    if (deniedPlayers.isNotEmpty) {
+    if (deniedPlayers.isNotEmpty && game.status != RemoteGameStatus.active) {
       return '${deniedPlayers.first.name} declined the invite';
     }
-    if (incomingMoves.length > game.moves.length - 1) {
-      // New moves arrived
+    if (movesMerged) {
       return '$senderName played a move';
     }
-    if (game.status == RemoteGameStatus.active) {
+    if (game.status == RemoteGameStatus.active && !wasActive) {
       return '$senderName accepted the invite';
     }
     return 'Game updated from $senderName';
@@ -338,11 +399,6 @@ class RemoteGameController extends ChangeNotifier {
       moves: game.moves,
     );
 
-    // Verify board hash matches (skip if empty hash from binary decode)
-    if (move.boardHash.isNotEmpty && move.boardHash != state.board.computeHash()) {
-      return 'Board hash mismatch (desync)';
-    }
-
     // Validate play moves against dictionary and rules
     if (move.type == MoveType.play) {
       final isFirstMove = state.board.isEmptyBoard;
@@ -350,7 +406,25 @@ class RemoteGameController extends ChangeNotifier {
       if (!result.valid) {
         return result.error;
       }
+      // Fix #2: Validate score matches computed score
+      if (move.score != result.score) {
+        return 'Score mismatch';
+      }
     }
+
+    // Fix #12: Validate swap moves — check that swapped tile letters exist in rack
+    if (move.type == MoveType.swap) {
+      final rack = List<String>.from(state.racks[state.currentPlayer].map((t) => t.letter));
+      for (final letter in (move.swappedTileLetters ?? <String>[])) {
+        final idx = rack.indexOf(letter);
+        if (idx < 0) {
+          return 'Swap contains tile not in rack: $letter';
+        }
+        rack.removeAt(idx);
+      }
+    }
+
+    // Pass and resign: no additional validation needed.
 
     return null;
   }
