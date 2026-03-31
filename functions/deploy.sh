@@ -5,13 +5,26 @@ PROJECT=fcm-switch
 REGION=europe-west1
 RUNTIME=go126
 
+# Compute hash of all Go source + go.mod (the deployable code)
+LOCAL_HASH=$(cat *.go go.mod | sha256sum | cut -d' ' -f1)
+
 for FUNC in Register Send Inbox; do
-  echo "Deploying $FUNC..."
-  gcloud functions deploy "$FUNC" \
-    --gen2 --runtime="$RUNTIME" --trigger-http --allow-unauthenticated \
-    --entry-point="$FUNC" --source=. --project="$PROJECT" --region="$REGION"
-  echo "$FUNC deployed."
+  # Get the hash label from the deployed function
+  DEPLOYED_HASH=$(gcloud functions describe "$FUNC" \
+    --region="$REGION" --project="$PROJECT" \
+    --format='value(labels.src_hash)' 2>/dev/null || echo "")
+
+  if [ "$DEPLOYED_HASH" = "$LOCAL_HASH" ]; then
+    echo "$FUNC is up to date, skipping."
+  else
+    echo "Deploying $FUNC..."
+    gcloud functions deploy "$FUNC" \
+      --gen2 --runtime="$RUNTIME" --trigger-http --allow-unauthenticated \
+      --entry-point="$FUNC" --source=. --project="$PROJECT" --region="$REGION" \
+      --update-labels="src_hash=$LOCAL_HASH"
+    echo "$FUNC deployed."
+  fi
   echo
 done
 
-echo "All functions deployed."
+echo "Done."
