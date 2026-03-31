@@ -6,7 +6,7 @@ REGION=europe-west1
 RUNTIME=go126
 
 # Compute hash of all Go source + go.mod (the deployable code)
-LOCAL_HASH=$(cat *.go go.mod | sha256sum | cut -d' ' -f1)
+LOCAL_HASH="h$(cat *.go go.mod | sha256sum | cut -c1-16)"
 
 for FUNC in Register Send Inbox; do
   # Get the hash label from the deployed function
