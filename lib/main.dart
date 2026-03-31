@@ -106,7 +106,7 @@ void main() async {
     }).toJS,
   );
 
-  // Fetch inbox when tab gains focus (catches messages missed by FCM)
+  // Fetch inbox when tab gains focus or internet returns
   web.document.addEventListener(
     'visibilitychange',
     ((web.Event _) {
@@ -115,6 +115,7 @@ void main() async {
       }
     }).toJS,
   );
+  web.window.addEventListener('online', ((web.Event _) { _fetchInbox(); }).toJS);
 
   runApp(const AnalfapetApp());
 
@@ -125,7 +126,15 @@ void main() async {
   _fetchInbox();
 }
 
+DateTime? _lastInboxFetch;
+
 Future<void> _fetchInbox() async {
+  final now = DateTime.now();
+  if (_lastInboxFetch != null && now.difference(_lastInboxFetch!) < const Duration(seconds: 5)) {
+    return;
+  }
+  _lastInboxFetch = now;
+
   final messages = await fcmService.fetchInbox(
     playerIdentity.uuid,
     playerIdentity.secret,

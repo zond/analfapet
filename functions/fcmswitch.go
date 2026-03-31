@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"sort"
 	"sync"
 	"time"
 
@@ -203,14 +204,55 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 
 	// Also append to inbox for pull-based retrieval
 	inboxRef := dbClient.NewRef("inbox/" + req.TargetUUID)
+	now := time.Now().UnixMilli()
 	msg := inboxMessage{
 		Data:      req.Data,
-		Timestamp: time.Now().UnixMilli(),
+		Timestamp: now,
 	}
 	if _, err := inboxRef.Push(ctx, msg); err != nil {
 		// Non-fatal — FCM already sent
 		log.Printf("inbox append failed for %s: %v", req.TargetUUID, err)
 	}
+
+	// Lazy enforce size + age bounds on write
+	go func() {
+		bgCtx := context.Background()
+		var msgs map[string]inboxMessage
+		if err := inboxRef.Get(bgCtx, &msgs); err != nil {
+			return
+		}
+		cutoff := now - int64(inboxTTL/time.Millisecond)
+		updates := map[string]interface{}{}
+		type entry struct {
+			key string
+			ts  int64
+		}
+		var valid []entry
+		for k, m := range msgs {
+			if m.Timestamp < cutoff {
+				updates[k] = nil // expired
+			} else {
+				valid = append(valid, entry{k, m.Timestamp})
+			}
+		}
+		// If over max, remove oldest
+		if len(valid) > maxInboxMessages {
+			// Sort by timestamp ascending
+			for i := 0; i < len(valid); i++ {
+				for j := i + 1; j < len(valid); j++ {
+					if valid[j].ts < valid[i].ts {
+						valid[i], valid[j] = valid[j], valid[i]
+					}
+				}
+			}
+			for i := 0; i < len(valid)-maxInboxMessages; i++ {
+				updates[valid[i].key] = nil
+			}
+		}
+		if len(updates) > 0 {
+			inboxRef.Update(bgCtx, updates)
+		}
+	}()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
@@ -263,9 +305,13 @@ func handleInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Filter expired, collect valid, enforce max
+	// Filter expired, collect valid sorted by timestamp
 	cutoff := time.Now().Add(-inboxTTL).UnixMilli()
-	var result []map[string]string
+	type validMsg struct {
+		data map[string]string
+		ts   int64
+	}
+	var valid []validMsg
 	var keysToDelete []string
 
 	for key, msg := range messages {
@@ -273,8 +319,14 @@ func handleInbox(w http.ResponseWriter, r *http.Request) {
 			keysToDelete = append(keysToDelete, key)
 			continue
 		}
-		result = append(result, msg.Data)
+		valid = append(valid, validMsg{msg.Data, msg.Timestamp})
 		keysToDelete = append(keysToDelete, key)
+	}
+
+	sort.Slice(valid, func(i, j int) bool { return valid[i].ts < valid[j].ts })
+	result := make([]map[string]string, len(valid))
+	for i, v := range valid {
+		result[i] = v.data
 	}
 
 	// Clear processed + expired messages
@@ -287,11 +339,6 @@ func handleInbox(w http.ResponseWriter, r *http.Request) {
 			log.Printf("inbox cleanup failed for %s: %v", req.UUID, err)
 		}
 	}
-
-	// Lazy trim: if inbox still has messages beyond max, the limit is
-	// enforced by only keeping the last maxInboxMessages in Send.
-	// (The Push approach auto-generates keys sorted by time, so the
-	// oldest are naturally read and cleared first.)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

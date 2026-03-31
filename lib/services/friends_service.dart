@@ -32,8 +32,11 @@ class FriendsService extends ChangeNotifier {
   }
 
   Future<void> save(List<Friend> friends) async {
+    // Deduplicate by UUID (keep first occurrence)
+    final seen = <String>{};
+    final unique = friends.where((f) => seen.add(f.id)).toList();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, jsonEncode(friends.map((f) => f.toJson()).toList()));
+    await prefs.setString(_key, jsonEncode(unique.map((f) => f.toJson()).toList()));
   }
 
   Future<void> add(Friend friend) async {
