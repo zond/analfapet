@@ -17,34 +17,13 @@ import 'services/message_codec.dart';
 import 'services/player_identity.dart';
 import 'services/remote_game_controller.dart';
 import 'services/remote_game_service.dart';
+import 'services/toast.dart';
 
 final playerIdentity = PlayerIdentity();
 final fcmService = FcmService();
 late final RemoteGameController remoteGameController;
-final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
 late final Dictionary dictionary;
-
-void _showToast(String message) {
-  scaffoldMessengerKey.currentState
-    ?..clearMaterialBanners()
-    ..showMaterialBanner(
-      MaterialBanner(
-        content: Text(message),
-        backgroundColor: const Color(0xFF6D3410),
-        actions: [
-          TextButton(
-            onPressed: () => scaffoldMessengerKey.currentState?.clearMaterialBanners(),
-            child: const Text('OK', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  // Auto-dismiss after 3 seconds
-  Future.delayed(const Duration(seconds: 3), () {
-    scaffoldMessengerKey.currentState?.clearMaterialBanners();
-  });
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,10 +61,10 @@ void main() async {
         final name = decoded['name'] as String;
         await FriendsService().add(Friend(id: uuid, name: name));
         print('[Friends] Auto-added $name ($uuid) from friend request');
-        _showToast('$name added you as a friend');
+        showToast('$name added you as a friend');
       } else if (msgType == 'game') {
         final toast = await remoteGameController.handleGameMessage(decoded);
-        if (toast != null) _showToast(toast);
+        if (toast != null) showToast(toast);
       }
     } catch (e) {
       print('[MSG] Failed to decode message: $e');
@@ -106,16 +85,7 @@ void main() async {
         _handleNotificationClick(data);
       } else if (type == 'sw-updated') {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          scaffoldMessengerKey.currentState?.showSnackBar(
-            SnackBar(
-              content: const Text('New version available'),
-              duration: const Duration(seconds: 30),
-              action: SnackBarAction(
-                label: 'RELOAD',
-                onPressed: () => web.window.location.reload(),
-              ),
-            ),
-          );
+          showToast('New version available — tap OK then reload');
         });
       }
     }).toJS,
@@ -260,7 +230,7 @@ void _handleFriendLink(String id, String? name) async {
     await FriendsService().sendFriendRequest(
       fcmService, playerIdentity.uuid, playerIdentity.name ?? 'Anon', id,
     );
-    _showToast('Added $name as a friend');
+    showToast('Added $name as a friend');
     nav.pushAndRemoveUntil(MaterialPageRoute(
       builder: (_) => FriendsScreen(
         identity: playerIdentity,

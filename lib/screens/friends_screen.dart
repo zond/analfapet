@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/fcm_service.dart';
 import '../services/friends_service.dart';
 import '../services/player_identity.dart';
+import '../services/toast.dart';
 import 'qr_scanner_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
@@ -140,9 +141,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   tooltip: 'Copy link',
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: link));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Link copied')),
-                    );
+                    showToast('Link copied');
                   },
                 ),
               ],
@@ -179,9 +178,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
     if (id == null || id.isEmpty) return;
     if (id == _identity.uuid) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("That's your own ID")),
-        );
+        showToast("That's your own ID");
       }
       return;
     }
@@ -189,9 +186,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
     if (name != null && name.isNotEmpty) {
       await _addAndNotify(Friend(id: id, name: name));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added $name')),
-        );
+        showToast('Added $name');
       }
     } else {
       _showAddFriendDialog(id);

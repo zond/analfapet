@@ -4,6 +4,7 @@ import '../models/remote_game.dart';
 import '../services/friends_service.dart';
 import '../services/remote_game_controller.dart';
 import '../services/dictionary.dart';
+import '../services/toast.dart';
 import 'remote_game_screen.dart';
 
 class RemoteGamesScreen extends StatefulWidget {
@@ -47,9 +48,7 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
 
     if (friends.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Add friends first')),
-        );
+        showToast('Add friends first');
       }
       return;
     }
@@ -104,9 +103,7 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
     if (confirmed == true && selected.isNotEmpty) {
       await ctrl.createGame(selected.toList());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Game created, invites sent')),
-        );
+        showToast('Game created, invites sent');
       }
     }
   }
@@ -128,9 +125,7 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
   void _acceptInvite(RemoteGame game) async {
     await ctrl.acceptInvite(game.gameId);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Accepted')),
-      );
+      showToast('Accepted');
     }
   }
 

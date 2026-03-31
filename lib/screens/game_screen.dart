@@ -5,6 +5,7 @@ import '../models/move.dart';
 import '../models/tile.dart';
 import '../services/dictionary.dart';
 import '../services/move_validator.dart';
+import '../services/toast.dart';
 import '../widgets/board_widget.dart';
 import '../widgets/tile_rack_widget.dart';
 
@@ -322,9 +323,7 @@ class _GameScreenState extends State<GameScreen> {
     final result = _validator.validate(game.board, _pendingPlacements, isFirstMove);
 
     if (!result.valid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.error!)),
-      );
+      showToast(result.error!);
       return;
     }
 
@@ -348,9 +347,7 @@ class _GameScreenState extends State<GameScreen> {
         _userRackOrder = null;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${result.wordsFormed.join(", ")} — ${result.score} points!')),
-      );
+      showToast('${result.wordsFormed.join(", ")} — ${result.score} points!');
 
       widget.onMoveSubmitted?.call(move);
     } else {
@@ -362,9 +359,7 @@ class _GameScreenState extends State<GameScreen> {
       game.drawTiles(game.currentRack, _pendingPlacements.length);
       game.consecutivePasses = 0;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${result.wordsFormed.join(", ")} — ${result.score} points!')),
-      );
+      showToast('${result.wordsFormed.join(", ")} — ${result.score} points!');
 
       setState(() {
         _lastLocalMove = move;
@@ -466,9 +461,7 @@ class _GameScreenState extends State<GameScreen> {
     ).then((result) {
       if (result == null || result is! Set<int>) return;
       if (game.bag.length < result.length) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Not enough tiles in the bag')),
-        );
+        showToast('Not enough tiles in the bag');
         return;
       }
 

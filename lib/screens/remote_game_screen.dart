@@ -4,6 +4,7 @@ import '../models/move.dart';
 import '../models/remote_game.dart';
 import '../services/dictionary.dart';
 import '../services/remote_game_controller.dart';
+import '../services/toast.dart';
 import 'game_screen.dart';
 
 /// Wrapper that reconstructs GameState from a RemoteGame and renders GameScreen.
@@ -122,11 +123,7 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
       onHurry: gameState.currentPlayer != localPlayerIndex
           ? () async {
               await widget.controller.sendGameState(game.gameId);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sent nudge')),
-                );
-              }
+              showToast('Sent nudge');
             }
           : null,
     );
