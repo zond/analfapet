@@ -124,6 +124,30 @@ class FcmService {
       }
     }
   }
+
+  /// Fetch all pending messages from the server inbox and clear it.
+  Future<List<Map<String, String>>> fetchInbox(String uuid, String secret) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_functionsBase/Inbox'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'uuid': uuid, 'secret': secret}),
+      );
+      if (resp.statusCode != 200) {
+        print('[FCM] Inbox fetch failed: ${resp.statusCode} ${resp.body}');
+        return [];
+      }
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      final messages = body['messages'] as List?;
+      if (messages == null) return [];
+      return messages
+          .map((m) => (m as Map<String, dynamic>).cast<String, String>())
+          .toList();
+    } catch (e) {
+      print('[FCM] Inbox fetch failed: $e');
+      return [];
+    }
+  }
 }
 
 JSPromise<JSString?> _jsGetTokenWithSW(web.ServiceWorkerRegistration swReg, String vapidKey) {

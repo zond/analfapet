@@ -106,10 +106,50 @@ void main() async {
     }).toJS,
   );
 
+  // Fetch inbox when tab gains focus (catches messages missed by FCM)
+  web.document.addEventListener(
+    'visibilitychange',
+    ((web.Event _) {
+      if (web.document.visibilityState == 'visible') {
+        _fetchInbox();
+      }
+    }).toJS,
+  );
+
   runApp(const AnalfapetApp());
 
   // Check URL fragment for notification data (when app opened from notification click)
   _checkUrlFragment();
+
+  // Also fetch inbox on startup
+  _fetchInbox();
+}
+
+Future<void> _fetchInbox() async {
+  final messages = await fcmService.fetchInbox(
+    playerIdentity.uuid,
+    playerIdentity.secret,
+  );
+  if (messages.isEmpty) return;
+  print('[Inbox] Fetched ${messages.length} messages');
+  for (final data in messages) {
+    final base64Data = data['d'];
+    if (base64Data == null) continue;
+    try {
+      final decoded = MessageCodec.decode(base64Data);
+      final msgType = decoded['type'] as String;
+      print('[Inbox] Processing: $msgType');
+      if (msgType == 'friend') {
+        final uuid = decoded['uuid'] as String;
+        final name = decoded['name'] as String;
+        await FriendsService().add(Friend(id: uuid, name: name));
+      } else if (msgType == 'game') {
+        await remoteGameController.handleGameMessage(decoded);
+      }
+    } catch (e) {
+      print('[Inbox] Failed to process message: $e');
+    }
+  }
 }
 
 void _checkUrlFragment() {

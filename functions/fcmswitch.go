@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"sync"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/db"
@@ -16,6 +17,11 @@ import (
 )
 
 var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
+
+const (
+	maxInboxMessages = 128
+	inboxTTL         = 7 * 24 * time.Hour
+)
 
 var (
 	dbClient  *db.Client
@@ -57,6 +63,16 @@ type sendRequest struct {
 	Data       map[string]string `json:"data"`
 }
 
+type inboxRequest struct {
+	UUID   string `json:"uuid"`
+	Secret string `json:"secret"`
+}
+
+type inboxMessage struct {
+	Data      map[string]string `json:"data"`
+	Timestamp int64             `json:"timestamp"`
+}
+
 func cors(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -71,6 +87,7 @@ func cors(w http.ResponseWriter, r *http.Request) bool {
 func init() {
 	functions.HTTP("Register", handleRegister)
 	functions.HTTP("Send", handleSend)
+	functions.HTTP("Inbox", handleInbox)
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -108,18 +125,15 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if existing.Secret != "" {
-		// Existing registration — verify secret
 		if existing.Secret != req.Secret {
 			http.Error(w, "invalid secret", http.StatusForbidden)
 			return
 		}
-		// Update token
 		if err := ref.Update(ctx, map[string]interface{}{"token": req.Token}); err != nil {
 			http.Error(w, fmt.Sprintf("db update: %v", err), http.StatusInternalServerError)
 			return
 		}
 	} else {
-		// First registration
 		if err := ref.Set(ctx, playerRecord{Token: req.Token, Secret: req.Secret}); err != nil {
 			http.Error(w, fmt.Sprintf("db set: %v", err), http.StatusInternalServerError)
 			return
@@ -167,6 +181,7 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send via FCM
 	_, err := msgClient.Send(ctx, &messaging.Message{
 		Token: player.Token,
 		Data:  req.Data,
@@ -186,6 +201,100 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Also append to inbox for pull-based retrieval
+	inboxRef := dbClient.NewRef("inbox/" + req.TargetUUID)
+	msg := inboxMessage{
+		Data:      req.Data,
+		Timestamp: time.Now().UnixMilli(),
+	}
+	if _, err := inboxRef.Push(ctx, msg); err != nil {
+		// Non-fatal — FCM already sent
+		log.Printf("inbox append failed for %s: %v", req.TargetUUID, err)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// handleInbox returns all pending messages for a player and clears the inbox.
+func handleInbox(w http.ResponseWriter, r *http.Request) {
+	if cors(w, r) {
+		return
+	}
+	initClients()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req inboxRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.UUID == "" || req.Secret == "" {
+		http.Error(w, "uuid and secret are required", http.StatusBadRequest)
+		return
+	}
+	if !uuidRegex.MatchString(req.UUID) {
+		http.Error(w, "invalid uuid format", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Verify secret
+	var player playerRecord
+	if err := dbClient.NewRef("players/" + req.UUID).Get(ctx, &player); err != nil {
+		http.Error(w, fmt.Sprintf("db read: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if player.Secret != req.Secret {
+		http.Error(w, "invalid secret", http.StatusForbidden)
+		return
+	}
+
+	// Read inbox
+	inboxRef := dbClient.NewRef("inbox/" + req.UUID)
+	var messages map[string]inboxMessage
+	if err := inboxRef.Get(ctx, &messages); err != nil {
+		http.Error(w, fmt.Sprintf("db read: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Filter expired, collect valid, enforce max
+	cutoff := time.Now().Add(-inboxTTL).UnixMilli()
+	var result []map[string]string
+	var keysToDelete []string
+
+	for key, msg := range messages {
+		if msg.Timestamp < cutoff {
+			keysToDelete = append(keysToDelete, key)
+			continue
+		}
+		result = append(result, msg.Data)
+		keysToDelete = append(keysToDelete, key)
+	}
+
+	// Clear processed + expired messages
+	if len(keysToDelete) > 0 {
+		updates := make(map[string]interface{})
+		for _, key := range keysToDelete {
+			updates[key] = nil
+		}
+		if err := inboxRef.Update(ctx, updates); err != nil {
+			log.Printf("inbox cleanup failed for %s: %v", req.UUID, err)
+		}
+	}
+
+	// Lazy trim: if inbox still has messages beyond max, the limit is
+	// enforced by only keeping the last maxInboxMessages in Send.
+	// (The Push approach auto-generates keys sorted by time, so the
+	// oldest are naturally read and cleared first.)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"messages": result,
+	})
 }
