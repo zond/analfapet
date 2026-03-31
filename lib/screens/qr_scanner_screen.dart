@@ -84,7 +84,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text('Scan QR code'),
-        backgroundColor: const Color(0xFF2E7D32),
+        backgroundColor: const Color(0xFF6D3410),
         foregroundColor: Colors.white,
       ),
       body: _error != null

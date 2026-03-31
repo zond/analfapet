@@ -265,13 +265,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final title = _identity.hasName ? 'Friends of ${_identity.name}' : 'Friends';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1B5E20),
+      backgroundColor: const Color(0xFF8B4513),
       appBar: AppBar(
         title: GestureDetector(
           onTap: _editName,
           child: Text(title),
         ),
-        backgroundColor: const Color(0xFF2E7D32),
+        backgroundColor: const Color(0xFF6D3410),
         foregroundColor: Colors.white,
         actions: [
           IconButton(

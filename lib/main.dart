@@ -31,7 +31,7 @@ void _showToast(String message) {
     ..showMaterialBanner(
       MaterialBanner(
         content: Text(message),
-        backgroundColor: const Color(0xFF2E7D32),
+        backgroundColor: const Color(0xFF6D3410),
         actions: [
           TextButton(
             onPressed: () => scaffoldMessengerKey.currentState?.clearMaterialBanners(),
@@ -339,7 +339,7 @@ class AnalfapetApp extends StatelessWidget {
       title: 'Analfapet',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF2E7D32),
+        colorSchemeSeed: const Color(0xFF6D3410),
         brightness: Brightness.dark,
       ),
       home: const HomeScreen(),
@@ -385,19 +385,33 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1B5E20),
+      backgroundColor: const Color(0xFF8B4513),
       body: Center(
         child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'ANALFAPET',
-                        style: TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 8,
-                        ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Text(
+                            '(an-)',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                          Text(
+                            'ALFAPET',
+                            style: TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 8,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -475,10 +489,10 @@ class _PlayerCountScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1B5E20),
+      backgroundColor: const Color(0xFF8B4513),
       appBar: AppBar(
         title: const Text('Local game'),
-        backgroundColor: const Color(0xFF2E7D32),
+        backgroundColor: const Color(0xFF6D3410),
         foregroundColor: Colors.white,
       ),
       body: Center(

@@ -609,7 +609,7 @@ class _GameScreenState extends State<GameScreen> {
     // Local mode handover screen
     if (!isRemote && _handover) {
       return Scaffold(
-        backgroundColor: const Color(0xFF1B5E20),
+        backgroundColor: const Color(0xFF8B4513),
         body: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => setState(() => _handover = false),
@@ -650,7 +650,7 @@ class _GameScreenState extends State<GameScreen> {
       child: Stack(
         children: [
           Scaffold(
-            backgroundColor: const Color(0xFF1B5E20),
+            backgroundColor: const Color(0xFF8B4513),
             appBar: AppBar(
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -661,7 +661,7 @@ class _GameScreenState extends State<GameScreen> {
                         style: const TextStyle(fontSize: 12, color: Colors.white70)),
                 ],
               ),
-              backgroundColor: const Color(0xFF2E7D32),
+              backgroundColor: const Color(0xFF6D3410),
               foregroundColor: Colors.white,
             ),
             body: Column(

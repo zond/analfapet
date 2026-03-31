@@ -204,10 +204,10 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
     final finished = [...ctrl.finishedGames, ...finishedViaGameplay];
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1B5E20),
+      backgroundColor: const Color(0xFF8B4513),
       appBar: AppBar(
         title: const Text('Remote games'),
-        backgroundColor: const Color(0xFF2E7D32),
+        backgroundColor: const Color(0xFF6D3410),
         foregroundColor: Colors.white,
       ),
       floatingActionButton: FloatingActionButton(

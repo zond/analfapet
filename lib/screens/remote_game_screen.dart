@@ -52,10 +52,10 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
 
     if (game == null) {
       return Scaffold(
-        backgroundColor: const Color(0xFF1B5E20),
+        backgroundColor: const Color(0xFF8B4513),
         appBar: AppBar(
           title: const Text('Game not found'),
-          backgroundColor: const Color(0xFF2E7D32),
+          backgroundColor: const Color(0xFF6D3410),
           foregroundColor: Colors.white,
         ),
         body: const Center(
@@ -67,10 +67,10 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
     if (!game.allAccepted) {
       final waiting = game.players.where((p) => !p.accepted).map((p) => p.name);
       return Scaffold(
-        backgroundColor: const Color(0xFF1B5E20),
+        backgroundColor: const Color(0xFF8B4513),
         appBar: AppBar(
           title: const Text('Waiting'),
-          backgroundColor: const Color(0xFF2E7D32),
+          backgroundColor: const Color(0xFF6D3410),
           foregroundColor: Colors.white,
         ),
         body: Center(
