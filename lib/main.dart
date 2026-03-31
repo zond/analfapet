@@ -26,9 +26,24 @@ final navigatorKey = GlobalKey<NavigatorState>();
 late final Dictionary dictionary;
 
 void _showToast(String message) {
-  scaffoldMessengerKey.currentState?.showSnackBar(
-    SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-  );
+  scaffoldMessengerKey.currentState
+    ?..clearMaterialBanners()
+    ..showMaterialBanner(
+      MaterialBanner(
+        content: Text(message),
+        backgroundColor: const Color(0xFF2E7D32),
+        actions: [
+          TextButton(
+            onPressed: () => scaffoldMessengerKey.currentState?.clearMaterialBanners(),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  // Auto-dismiss after 3 seconds
+  Future.delayed(const Duration(seconds: 3), () {
+    scaffoldMessengerKey.currentState?.clearMaterialBanners();
+  });
 }
 
 void main() async {
