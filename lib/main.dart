@@ -103,6 +103,7 @@ void main() async {
   web.window.addEventListener('online', ((web.Event _) { _fetchInbox(); }).toJS);
 
   runApp(const AnalfapetApp());
+  initToast(navigatorKey);
 
   // Check URL fragment for notification data (when app opened from notification click)
   _checkUrlFragment();
