@@ -322,7 +322,10 @@ bool _shouldShowInstallHint() {
   final isStandalone = web.window.matchMedia('(display-mode: standalone)').matches;
   if (isStandalone) return false;
   final ua = web.window.navigator.userAgent.toLowerCase();
-  return ua.contains('android') || ua.contains('iphone') || ua.contains('ipad');
+  final isMobile = ua.contains('android') || ua.contains('iphone') || ua.contains('ipad');
+  // iPadOS 13+ reports as Macintosh — detect via touch support
+  final isIPadOS = ua.contains('macintosh') && web.window.navigator.maxTouchPoints > 0;
+  return isMobile || isIPadOS;
 }
 
 void _triggerInstall() {
