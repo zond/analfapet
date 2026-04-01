@@ -13,13 +13,15 @@ class FcmService {
 
   String? get token => _token;
 
-  Future<void> init(String playerId, String secret) async {
-    try {
-      print('[FCM] Requesting permission...');
-      final settings = await _messaging.requestPermission();
-      print('[FCM] Permission: ${settings.authorizationStatus}');
+  String? _playerId;
+  String? _secret;
+  bool _initialized = false;
 
-      // Register service worker at correct path for subpath deploys
+  Future<void> init(String playerId, String secret) async {
+    _playerId = playerId;
+    _secret = secret;
+    try {
+      // Register service worker early (doesn't need permission)
       final baseHref = web.document.querySelector('base')?.getAttribute('href') ?? '/';
       final swUrl = '${baseHref}firebase-messaging-sw.js';
       print('[FCM] Registering service worker at $swUrl');
@@ -27,24 +29,53 @@ class FcmService {
         swUrl.toJS,
         web.RegistrationOptions(updateViaCache: 'none'),
       ).toDart;
-      print('[FCM] Service worker registered, waiting for ready...');
-      final swReg = await web.window.navigator.serviceWorker.ready.toDart;
-      print('[FCM] Service worker ready');
+      print('[FCM] Service worker registered');
 
+      // Try to get token if permission already granted (no prompt)
+      await _tryGetToken();
+    } catch (e) {
+      print('[FCM] Init failed (non-fatal): $e');
+    }
+  }
+
+  /// Request notification permission (should be called from a user gesture on iOS).
+  /// Returns true if permission was granted and token was obtained.
+  Future<bool> ensurePermission() async {
+    if (_initialized) return _token != null;
+    try {
+      print('[FCM] Requesting permission...');
+      final settings = await _messaging.requestPermission();
+      print('[FCM] Permission: ${settings.authorizationStatus}');
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        await _tryGetToken();
+        return _token != null;
+      }
+    } catch (e) {
+      print('[FCM] Permission request failed: $e');
+    }
+    return false;
+  }
+
+  Future<void> _tryGetToken() async {
+    if (_initialized || _playerId == null) return;
+    try {
+      final swReg = await web.window.navigator.serviceWorker.ready.toDart;
       print('[FCM] Getting token...');
       _token = await _getTokenViaJs(swReg);
       print('[FCM] Token: ${_token != null ? '${_token!.substring(0, 20)}...' : 'null'}');
 
       if (_token != null) {
-        await _registerToken(playerId, _token!, secret);
+        _initialized = true;
+        await _registerToken(_playerId!, _token!, _secret!);
+        _messaging.onTokenRefresh.listen((token) {
+          print('[FCM] Token refreshed');
+          _token = token;
+          _registerToken(_playerId!, token, _secret!);
+        });
       }
-      _messaging.onTokenRefresh.listen((token) {
-        print('[FCM] Token refreshed');
-        _token = token;
-        _registerToken(playerId, token, secret);
-      });
     } catch (e) {
-      print('[FCM] Init failed (non-fatal): $e');
+      print('[FCM] Token acquisition failed: $e');
     }
   }
 

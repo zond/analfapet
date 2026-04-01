@@ -318,6 +318,12 @@ class AnalfapetApp extends StatelessWidget {
   }
 }
 
+bool get _isIOS {
+  final ua = web.window.navigator.userAgent.toLowerCase();
+  return ua.contains('iphone') || ua.contains('ipad') ||
+      (ua.contains('macintosh') && web.window.navigator.maxTouchPoints > 0);
+}
+
 bool _shouldShowInstallHint() {
   final isStandalone = web.window.matchMedia('(display-mode: standalone)').matches;
   if (isStandalone) return false;
@@ -366,7 +372,9 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _openRemoteGames(BuildContext context) {
+  void _openRemoteGames(BuildContext context) async {
+    await fcmService.ensurePermission();
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -379,7 +387,9 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _openFriends(BuildContext context) {
+  void _openFriends(BuildContext context) async {
+    await fcmService.ensurePermission();
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => FriendsScreen(
@@ -460,7 +470,9 @@ class HomeScreen extends StatelessWidget {
                                   child: Text(
                                     _canPromptInstall
                                         ? 'Tap to install for better notifications'
-                                        : 'Add to home screen for better notifications',
+                                        : _isIOS
+                                            ? 'Use Share → Add to Home Screen to make the game work'
+                                            : 'Add to home screen for better notifications',
                                     style: TextStyle(
                                       color: _canPromptInstall ? Colors.white70 : Colors.white54,
                                       fontSize: 13,
