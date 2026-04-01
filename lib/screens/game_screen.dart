@@ -543,11 +543,27 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   String get _turnLabel {
-    if (game.gameOver) return 'Game over';
+    if (game.gameOver) {
+      int maxScore = -1;
+      int winnerIdx = 0;
+      for (var i = 0; i < game.scores.length; i++) {
+        if (game.scores[i] > maxScore) {
+          maxScore = game.scores[i];
+          winnerIdx = i;
+        }
+      }
+      return '${_playerName(winnerIdx)} won!';
+    }
     if (isRemote) {
       return isMyTurn ? 'Your turn' : '${_playerName(game.currentPlayer)}\'s turn';
     }
     return _playerName(game.currentPlayer);
+  }
+
+  String get _gameOverText {
+    final scores = List.generate(game.playerCount, (i) =>
+        '${_playerName(i)}: ${game.scores[i]}').join('\n');
+    return scores;
   }
 
   /// Find the longest word formed by placements on the current board.
@@ -811,9 +827,10 @@ class _GameScreenState extends State<GameScreen> {
                               ],
                             )
                           : game.gameOver
-                              ? const Text(
-                                  'Game over',
-                                  style: TextStyle(color: Colors.white54, fontSize: 16),
+                              ? Text(
+                                  _gameOverText,
+                                  style: const TextStyle(color: Colors.white54, fontSize: 16),
+                                  textAlign: TextAlign.center,
                                 )
                               : const SizedBox.shrink(),
                 ),

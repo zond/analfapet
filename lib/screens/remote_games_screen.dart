@@ -161,6 +161,36 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
     return names;
   }
 
+  String _winnerText(RemoteGame game, GameState state) {
+    int maxScore = -1;
+    int winnerIdx = 0;
+    for (var i = 0; i < state.scores.length; i++) {
+      if (state.scores[i] > maxScore) {
+        maxScore = state.scores[i];
+        winnerIdx = i;
+      }
+    }
+    final winnerName = game.players[winnerIdx].uuid == widget.myId
+        ? 'You'
+        : game.players[winnerIdx].name;
+    final scores = List.generate(state.scores.length, (i) {
+      final name = game.players[i].uuid == widget.myId ? 'You' : game.players[i].name;
+      return '$name: ${state.scores[i]}';
+    }).join(', ');
+    return '$winnerName won! $scores';
+  }
+
+  String _finishedStatus(RemoteGame game) {
+    if (game.moves.isEmpty) return 'Cancelled';
+    final state = GameState.replayFromMoves(
+      gameId: game.gameId,
+      playerCount: game.players.length,
+      seed: game.seed,
+      moves: game.moves,
+    );
+    return _winnerText(game, state);
+  }
+
   String _gameStatus(RemoteGame game) {
     switch (game.status) {
       case RemoteGameStatus.invited:
@@ -180,13 +210,13 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
           moves: game.moves,
         );
         if (state.gameOver) {
-          return 'Finished — ${game.moves.length} moves';
+          return _winnerText(game, state);
         }
         final currentPlayer = game.players[state.currentPlayer];
         final turnName = currentPlayer.uuid == widget.myId ? 'Your' : "${currentPlayer.name}'s";
         return "$turnName turn — ${game.moves.length} moves";
       case RemoteGameStatus.finished:
-        return 'Finished — ${game.moves.length} moves';
+        return _finishedStatus(game);
     }
   }
 

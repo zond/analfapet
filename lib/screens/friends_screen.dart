@@ -67,7 +67,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
     });
   }
 
-  Future<void> _promptForName() async {
+  Future<void> _promptForName({bool forceShow = false}) async {
+    // Never prompt if name is already set (unless editing)
+    if (!forceShow && _identity.hasName) return;
     final controller = TextEditingController(text: _identity.name ?? '');
     final name = await showDialog<String>(
       context: context,
@@ -101,7 +103,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
   }
 
   void _editName() async {
-    await _promptForName();
+    await _promptForName(forceShow: true);
   }
 
   String get _friendLink {
