@@ -373,6 +373,29 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _pass() {
+    showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pass'),
+        content: const Text('Are you sure you want to pass your turn?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pass'),
+          ),
+        ],
+      ),
+    ).then((confirmed) {
+      if (confirmed != true) return;
+      _doPass();
+    });
+  }
+
+  void _doPass() {
     _recallTiles();
     final move = Move(
       type: MoveType.pass,
