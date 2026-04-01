@@ -3,6 +3,8 @@ import 'dart:math';
 import 'dart:js_interop';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web/web.dart' as web;
 import 'firebase_options.dart';
 import 'models/game_state.dart';
@@ -110,6 +112,35 @@ void main() async {
 
   // Also fetch inbox on startup
   _fetchInbox();
+
+  // Check for new version
+  _checkVersion();
+}
+
+Future<void> _checkVersion() async {
+  try {
+    // Fetch version.txt from the server, bypassing cache
+    final baseHref = web.document.querySelector('base')?.getAttribute('href') ?? '/';
+    final url = '${baseHref}version.txt?t=${DateTime.now().millisecondsSinceEpoch}';
+    final resp = await http.get(Uri.parse(url));
+    if (resp.statusCode != 200) return;
+    final serverVersion = resp.body.trim();
+
+    // Compare with the cached version (stored in SharedPreferences)
+    final prefs = await SharedPreferences.getInstance();
+    final localVersion = prefs.getString('app_version');
+
+    if (localVersion != null && localVersion != serverVersion) {
+      // New version — auto-reload
+      await prefs.setString('app_version', serverVersion);
+      web.window.location.reload();
+      return;
+    }
+    // Store the current version
+    await prefs.setString('app_version', serverVersion);
+  } catch (e) {
+    print('[Version] Check failed: $e');
+  }
 }
 
 DateTime? _lastInboxFetch;

@@ -17,7 +17,11 @@ flutter pub get
 flutter build web --release --base-href /analfapet/
 
 # Stamp the service worker so the browser detects a new version
-echo "// build: $(date -Iseconds)" >> build/web/firebase-messaging-sw.js
+BUILD_TS="$(date -Iseconds)"
+echo "// build: $BUILD_TS" >> build/web/firebase-messaging-sw.js
+
+# Write a version file for startup cache checking
+echo "$BUILD_TS" > build/web/version.txt
 
 # Use provided remote URL or default to SSH
 REMOTE="${1:-git@github.com:zond/analfapet.git}"
