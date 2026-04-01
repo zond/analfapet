@@ -358,6 +358,9 @@ class _GameScreenState extends State<GameScreen> {
       game.scores[game.currentPlayer] += result.score;
       game.drawTiles(game.currentRack, _pendingPlacements.length);
       game.consecutivePasses = 0;
+      if (game.currentRack.isEmpty && game.bag.isEmpty) {
+        game.gameOver = true;
+      }
 
       showToast('${result.wordsFormed.join(", ")} — ${result.score} points!');
 
@@ -365,9 +368,11 @@ class _GameScreenState extends State<GameScreen> {
         _lastLocalMove = move;
         _lastLocalMovePlayer = player;
         _pendingPlacements.clear();
-        game.nextTurn();
+        if (!game.gameOver) {
+          game.nextTurn();
+        }
         _userRackOrder = null;
-        _handover = true;
+        _handover = !game.gameOver;
       });
     }
   }
@@ -538,6 +543,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   String get _turnLabel {
+    if (game.gameOver) return 'Game over';
     if (isRemote) {
       return isMyTurn ? 'Your turn' : '${_playerName(game.currentPlayer)}\'s turn';
     }

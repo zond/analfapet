@@ -85,7 +85,7 @@ void main() async {
         _handleNotificationClick(data);
       } else if (type == 'sw-updated') {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          showToast('New version available — tap OK then reload');
+          showToast('New version available — reload to update');
         });
       }
     }).toJS,

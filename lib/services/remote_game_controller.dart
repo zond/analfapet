@@ -125,6 +125,25 @@ class RemoteGameController extends ChangeNotifier {
       }
     }
 
+    // Determine the action label for the last move (for background notifications)
+    String? action;
+    if (game.moves.isNotEmpty) {
+      switch (game.moves.last.type) {
+        case MoveType.play:
+          action = 'played';
+          break;
+        case MoveType.pass:
+          action = 'passed';
+          break;
+        case MoveType.swap:
+          action = 'swapped';
+          break;
+        case MoveType.resign:
+          action = 'resigned';
+          break;
+      }
+    }
+
     await fcm.broadcast(
       game.players.map((p) => p.uuid).toList(),
       myId,
@@ -134,6 +153,7 @@ class RemoteGameController extends ChangeNotifier {
         'n': myName,
         'g': gameId,
         if (turnName != null) 'turn': turnName,
+        if (action != null) 'a': action,
       },
     );
   }
@@ -404,7 +424,17 @@ class RemoteGameController extends ChangeNotifier {
       }
       final currentPlayer = game.players[state.currentPlayer];
       final turnName = currentPlayer.uuid == myId ? 'Your' : "${currentPlayer.name}'s";
-      return '$senderName played — $turnName turn';
+      final lastMoveType = game.moves.last.type;
+      switch (lastMoveType) {
+        case MoveType.play:
+          return '$senderName played — $turnName turn';
+        case MoveType.pass:
+          return '$senderName passed — $turnName turn';
+        case MoveType.swap:
+          return '$senderName swapped tiles — $turnName turn';
+        case MoveType.resign:
+          return '$senderName resigned';
+      }
     }
     if (game.status == RemoteGameStatus.active && !wasActive) {
       return '$senderName accepted the invite';

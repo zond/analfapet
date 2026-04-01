@@ -70,8 +70,14 @@ messaging.onBackgroundMessage((payload) => {
       break;
     case 'move':
       const turn = payload.data?.turn;
+      const action = payload.data?.a || 'played';
       title = 'Analfapet';
-      body = turn ? `${sender} played — ${turn}'s turn` : `${sender} played`;
+      if (action === 'resigned') {
+        body = `${sender} resigned`;
+      } else {
+        const actionText = action === 'swapped' ? 'swapped tiles' : action;
+        body = turn ? `${sender} ${actionText} — ${turn}'s turn` : `${sender} ${actionText}`;
+      }
       break;
     default:
       title = 'Analfapet';
