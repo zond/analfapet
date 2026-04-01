@@ -102,6 +102,7 @@ void main() async {
   );
   web.window.addEventListener('online', ((web.Event _) { _fetchInbox(); }).toJS);
 
+  _initInstallPrompt();
   runApp(const AnalfapetApp());
   initToast(navigatorKey);
 
@@ -319,14 +320,37 @@ class AnalfapetApp extends StatelessWidget {
 }
 
 bool _shouldShowInstallHint() {
-  // Check if running as installed PWA (standalone mode)
   final isStandalone = web.window.matchMedia('(display-mode: standalone)').matches;
   if (isStandalone) return false;
-
-  // Check if mobile browser
   final ua = web.window.navigator.userAgent.toLowerCase();
-  final isMobile = ua.contains('android') || ua.contains('iphone') || ua.contains('ipad');
-  return isMobile;
+  return ua.contains('android') || ua.contains('iphone') || ua.contains('ipad');
+}
+
+// Capture the beforeinstallprompt event for Android Chrome
+JSObject? _deferredInstallPrompt;
+
+void _initInstallPrompt() {
+  web.window.addEventListener(
+    'beforeinstallprompt',
+    ((web.Event e) {
+      e.preventDefault();
+      _deferredInstallPrompt = e as JSObject;
+    }).toJS,
+  );
+}
+
+void _triggerInstall() {
+  final prompt = _deferredInstallPrompt;
+  if (prompt != null) {
+    prompt.callMethod('prompt'.toJS);
+    _deferredInstallPrompt = null;
+  }
+}
+
+bool get _canPromptInstall => _deferredInstallPrompt != null;
+
+extension on JSObject {
+  external void callMethod(JSAny method);
 }
 
 class HomeScreen extends StatelessWidget {
@@ -420,20 +444,31 @@ class HomeScreen extends StatelessWidget {
                       ),
                       if (_shouldShowInstallHint()) ...[
                         const SizedBox(height: 32),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 32),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.install_mobile, color: Colors.white54, size: 18),
-                              SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  'Add to home screen for better notifications',
-                                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                        GestureDetector(
+                          onTap: _canPromptInstall ? _triggerInstall : null,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.install_mobile,
+                                    color: _canPromptInstall ? Colors.white70 : Colors.white54,
+                                    size: 18),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    _canPromptInstall
+                                        ? 'Tap to install for better notifications'
+                                        : 'Add to home screen for better notifications',
+                                    style: TextStyle(
+                                      color: _canPromptInstall ? Colors.white70 : Colors.white54,
+                                      fontSize: 13,
+                                      decoration: _canPromptInstall ? TextDecoration.underline : null,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ],
