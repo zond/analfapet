@@ -203,23 +203,26 @@ void _handleFriendLink(String id, String? name) async {
     final controller = TextEditingController();
     final chosenName = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('What\'s your name?'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Your name'),
-          autofocus: true,
-          onSubmitted: (v) => Navigator.pop(context, v.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              final v = controller.text.trim();
-              Navigator.pop(context, v.isNotEmpty ? v : 'Anon');
-            },
-            child: const Text('OK'),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: AlertDialog(
+          title: const Text('What\'s your name?'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'Your name'),
+            autofocus: true,
+            onSubmitted: (v) => Navigator.pop(context, v.trim()),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () {
+                final v = controller.text.trim();
+                Navigator.pop(context, v.isNotEmpty ? v : 'Anon');
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       ),
     );
     await playerIdentity.setName((chosenName != null && chosenName.isNotEmpty) ? chosenName : 'Anon');

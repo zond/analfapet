@@ -71,23 +71,26 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final controller = TextEditingController(text: _identity.name ?? '');
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('What\'s your name?'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Your name'),
-          autofocus: true,
-          onSubmitted: (v) => Navigator.pop(context, v.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              final v = controller.text.trim();
-              Navigator.pop(context, v.isNotEmpty ? v : null);
-            },
-            child: const Text('OK'),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: AlertDialog(
+          title: const Text('What\'s your name?'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'Your name'),
+            autofocus: true,
+            onSubmitted: (v) => Navigator.pop(context, v.trim()),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () {
+                final v = controller.text.trim();
+                Navigator.pop(context, v.isNotEmpty ? v : null);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       ),
     );
     if (name != null && name.isNotEmpty) {
