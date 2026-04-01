@@ -52,6 +52,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
   }
 
   Future<void> _init() async {
+    await _identity.refreshName();
     await _load();
     if (!_identity.hasName && mounted) {
       await _promptForName();

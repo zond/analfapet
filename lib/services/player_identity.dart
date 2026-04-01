@@ -19,6 +19,12 @@ class PlayerIdentity {
     _name = prefs.getString(_nameKey);
   }
 
+  /// Re-read name from storage (in case it was set in another context).
+  Future<void> refreshName() async {
+    final prefs = await SharedPreferences.getInstance();
+    _name = prefs.getString(_nameKey);
+  }
+
   Future<void> setName(String name) async {
     _name = name;
     final prefs = await SharedPreferences.getInstance();
