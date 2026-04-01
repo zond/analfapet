@@ -326,30 +326,30 @@ bool _shouldShowInstallHint() {
 }
 
 void _triggerInstall() {
-  final prompt = _getDeferredPrompt();
+  final prompt = _jsGetDeferredPrompt;
   if (prompt != null) {
-    prompt.callMethod('prompt'.toJS);
-    _setDeferredPrompt(null);
+    _jsPrompt(prompt);
+    _jsSetDeferredPrompt = null;
   }
 }
 
-bool get _canPromptInstall => _getDeferredPrompt() != null;
+bool get _canPromptInstall => _jsGetDeferredPrompt != null;
 
-JSObject? _getDeferredPrompt() {
-  final val = globalContext.getProperty('_deferredInstallPrompt'.toJS);
-  if (val == null || val.isUndefinedOrNull) return null;
-  return val as JSObject;
+@JS('window._deferredInstallPrompt')
+external JSObject? get _jsGetDeferredPrompt;
+
+@JS('window._deferredInstallPrompt')
+external set _jsSetDeferredPrompt(JSObject? value);
+
+@JS()
+@staticInterop
+class _PromptEvent {}
+
+extension on _PromptEvent {
+  external void prompt();
 }
 
-void _setDeferredPrompt(JSObject? value) {
-  globalContext.setProperty('_deferredInstallPrompt'.toJS, value ?? null);
-}
-
-extension on JSObject {
-  external void callMethod(JSAny method);
-  external JSAny? getProperty(JSAny name);
-  external void setProperty(JSAny name, JSAny? value);
-}
+void _jsPrompt(JSObject obj) => (obj as _PromptEvent).prompt();
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
