@@ -1,11 +1,11 @@
 {
-    "name": "analfabet",
-    "short_name": "analfabet",
+    "name": "(an-)ALFAPET",
+    "short_name": "Analfapet",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#8B4513",
+    "theme_color": "#6D3410",
+    "description": "Swedish word game",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

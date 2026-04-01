@@ -102,7 +102,6 @@ void main() async {
   );
   web.window.addEventListener('online', ((web.Event _) { _fetchInbox(); }).toJS);
 
-  _initInstallPrompt();
   runApp(const AnalfapetApp());
   initToast(navigatorKey);
 
@@ -326,31 +325,30 @@ bool _shouldShowInstallHint() {
   return ua.contains('android') || ua.contains('iphone') || ua.contains('ipad');
 }
 
-// Capture the beforeinstallprompt event for Android Chrome
-JSObject? _deferredInstallPrompt;
-
-void _initInstallPrompt() {
-  web.window.addEventListener(
-    'beforeinstallprompt',
-    ((web.Event e) {
-      e.preventDefault();
-      _deferredInstallPrompt = e as JSObject;
-    }).toJS,
-  );
-}
-
 void _triggerInstall() {
-  final prompt = _deferredInstallPrompt;
+  final prompt = _getDeferredPrompt();
   if (prompt != null) {
     prompt.callMethod('prompt'.toJS);
-    _deferredInstallPrompt = null;
+    _setDeferredPrompt(null);
   }
 }
 
-bool get _canPromptInstall => _deferredInstallPrompt != null;
+bool get _canPromptInstall => _getDeferredPrompt() != null;
+
+JSObject? _getDeferredPrompt() {
+  final val = globalContext.getProperty('_deferredInstallPrompt'.toJS);
+  if (val == null || val.isUndefinedOrNull) return null;
+  return val as JSObject;
+}
+
+void _setDeferredPrompt(JSObject? value) {
+  globalContext.setProperty('_deferredInstallPrompt'.toJS, value ?? null);
+}
 
 extension on JSObject {
   external void callMethod(JSAny method);
+  external JSAny? getProperty(JSAny name);
+  external void setProperty(JSAny name, JSAny? value);
 }
 
 class HomeScreen extends StatelessWidget {
