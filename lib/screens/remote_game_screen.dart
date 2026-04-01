@@ -106,8 +106,11 @@ class _RemoteGameScreenState extends State<RemoteGameScreen> {
     int? lastMovePlayerIndex;
     if (game.moves.isNotEmpty) {
       lastMove = game.moves.last;
-      // The player who made the last move is the one before the current player
-      lastMovePlayerIndex = (gameState.currentPlayer - 1 + game.players.length) % game.players.length;
+      // When gameOver, nextTurn() was not called — currentPlayer IS the last mover.
+      // Otherwise, the last mover is the one before currentPlayer.
+      lastMovePlayerIndex = gameState.gameOver
+          ? gameState.currentPlayer
+          : (gameState.currentPlayer - 1 + game.players.length) % game.players.length;
     }
 
     return GameScreen(
