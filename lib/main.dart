@@ -415,6 +415,8 @@ extension on _PromptEvent {
 
 void _jsPrompt(JSObject obj) => (obj as _PromptEvent).prompt();
 
+bool _navigating = false;
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -428,32 +430,44 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _openRemoteGames(BuildContext context) async {
-    if (_requireHomeScreen(context)) return;
-    await fcmService.ensurePermission();
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RemoteGamesScreen(
-          controller: remoteGameController,
-          dictionary: dictionary,
-          myId: playerIdentity.uuid,
+    if (_navigating) return;
+    _navigating = true;
+    try {
+      if (_requireHomeScreen(context)) return;
+      await fcmService.ensurePermission();
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RemoteGamesScreen(
+            controller: remoteGameController,
+            dictionary: dictionary,
+            myId: playerIdentity.uuid,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _navigating = false;
+    }
   }
 
   void _openFriends(BuildContext context) async {
-    if (_requireHomeScreen(context)) return;
-    await fcmService.ensurePermission();
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => FriendsScreen(
-        identity: playerIdentity,
-        fcmService: fcmService,
-      )),
-    );
+    if (_navigating) return;
+    _navigating = true;
+    try {
+      if (_requireHomeScreen(context)) return;
+      await fcmService.ensurePermission();
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => FriendsScreen(
+          identity: playerIdentity,
+          fcmService: fcmService,
+        )),
+      );
+    } finally {
+      _navigating = false;
+    }
   }
 
   @override
