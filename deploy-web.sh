@@ -4,8 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Build if not already built (CI may have built already)
-if [ ! -d build/web ]; then
+# Build unless a remote URL was passed (CI builds before calling this)
+if [ -z "$1" ]; then
   echo "Building..."
   flutter build web --release --base-href /analfapet/
 fi
