@@ -69,26 +69,38 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Future<void> _promptForName() async {
     final controller = TextEditingController(text: _identity.name ?? '');
-    final name = await showDialog<String>(
+    final name = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: AlertDialog(
-          title: const Text('What\'s your name?'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(labelText: 'Your name'),
-            autofocus: true,
-            onSubmitted: (v) => Navigator.pop(context, v.trim()),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                final v = controller.text.trim();
-                Navigator.pop(context, v.isNotEmpty ? v : null);
-              },
-              child: const Text('OK'),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24, right: 24, top: 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('What\'s your name?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(labelText: 'Your name'),
+              autofocus: true,
+              onSubmitted: (v) => Navigator.pop(context, v.trim()),
             ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  final v = controller.text.trim();
+                  Navigator.pop(context, v.isNotEmpty ? v : null);
+                },
+                child: const Text('OK'),
+              ),
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
