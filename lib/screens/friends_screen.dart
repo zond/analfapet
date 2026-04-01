@@ -82,14 +82,21 @@ class _FriendsScreenState extends State<FriendsScreen> {
           TextButton(
             onPressed: () {
               final v = controller.text.trim();
-              if (v.isNotEmpty) Navigator.pop(context, v);
+              Navigator.pop(context, v.isNotEmpty ? v : null);
             },
             child: const Text('OK'),
           ),
         ],
       ),
     );
-    await _identity.setName((name != null && name.isNotEmpty) ? name : 'Anon');
+    if (name != null && name.isNotEmpty) {
+      // User explicitly entered a name
+      await _identity.setName(name);
+    } else if (!_identity.hasName) {
+      // First time, dismissed without entering — default to Anon
+      await _identity.setName('Anon');
+    }
+    // If dismissed but already has a name, keep the existing name
     setState(() {});
   }
 
@@ -262,9 +269,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF8B4513),
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: _editName,
-          child: Text(title),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: _editName,
+              child: const Icon(Icons.edit, size: 16, color: Colors.white54),
+            ),
+          ],
         ),
         backgroundColor: const Color(0xFF6D3410),
         foregroundColor: Colors.white,
