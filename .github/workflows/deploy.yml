@@ -30,6 +30,9 @@ jobs:
 
       - run: flutter build web --release --base-href /analfapet/
 
+      - name: Stamp service worker for cache busting
+        run: echo "// build: $(date -Iseconds)" >> build/web/firebase-messaging-sw.js
+
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:

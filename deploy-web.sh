@@ -4,6 +4,9 @@ set -e
 echo "Building..."
 flutter build web --release --base-href /analfapet/
 
+# Stamp the service worker so the browser detects a new version
+echo "// build: $(date -Iseconds)" >> build/web/firebase-messaging-sw.js
+
 echo "Deploying to gh-pages..."
 DIR=$(mktemp -d)
 cp -r build/web/* "$DIR"
