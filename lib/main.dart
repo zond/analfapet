@@ -318,6 +318,17 @@ class AnalfapetApp extends StatelessWidget {
   }
 }
 
+bool _shouldShowInstallHint() {
+  // Check if running as installed PWA (standalone mode)
+  final isStandalone = web.window.matchMedia('(display-mode: standalone)').matches;
+  if (isStandalone) return false;
+
+  // Check if mobile browser
+  final ua = web.window.navigator.userAgent.toLowerCase();
+  final isMobile = ua.contains('android') || ua.contains('iphone') || ua.contains('ipad');
+  return isMobile;
+}
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -407,6 +418,25 @@ class HomeScreen extends StatelessWidget {
                         icon: Icons.group,
                         label: 'Friends',
                       ),
+                      if (_shouldShowInstallHint()) ...[
+                        const SizedBox(height: 32),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 32),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.install_mobile, color: Colors.white54, size: 18),
+                              SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Add to home screen for better notifications',
+                                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
       ),
