@@ -4,11 +4,17 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Build unless a remote URL was passed (CI builds before calling this)
-if [ -z "$1" ]; then
-  echo "Building..."
-  flutter build web --release --base-href /analfapet/
+# Download wordlist if not present
+if [ ! -f assets/wordlist.txt ]; then
+  echo "Downloading wordlist..."
+  mkdir -p assets
+  curl -fsSL -o assets/wordlist.txt "https://github.com/axki/saol-wordlist/raw/refs/heads/master/output/saol_wordlist.txt"
 fi
+
+# Build
+echo "Building..."
+flutter pub get
+flutter build web --release --base-href /analfapet/
 
 # Stamp the service worker so the browser detects a new version
 echo "// build: $(date -Iseconds)" >> build/web/firebase-messaging-sw.js
