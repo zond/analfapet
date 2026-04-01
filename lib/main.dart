@@ -368,6 +368,31 @@ bool _shouldShowInstallHint() {
   return isMobile || isIPadOS;
 }
 
+bool get _isIOSNotInstalled =>
+    _isIOS && !web.window.matchMedia('(display-mode: standalone)').matches;
+
+/// Show a dialog telling iOS users to add to home screen. Returns true if blocked.
+bool _requireHomeScreen(BuildContext context) {
+  if (!_isIOSNotInstalled) return false;
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Add to Home Screen'),
+      content: const Text(
+        'To use remote games and friends, add this app to your home screen first.\n\n'
+        'Tap the Share button (square with arrow) in Safari, then "Add to Home Screen".',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
+  return true;
+}
+
 void _triggerInstall() {
   final prompt = _jsGetDeferredPrompt;
   if (prompt != null) {
@@ -407,6 +432,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _openRemoteGames(BuildContext context) async {
+    if (_requireHomeScreen(context)) return;
     await fcmService.ensurePermission();
     if (!context.mounted) return;
     Navigator.push(
@@ -422,6 +448,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _openFriends(BuildContext context) async {
+    if (_requireHomeScreen(context)) return;
     await fcmService.ensurePermission();
     if (!context.mounted) return;
     Navigator.push(
