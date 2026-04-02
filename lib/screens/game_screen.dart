@@ -176,15 +176,7 @@ class _GameScreenState extends State<GameScreen> {
   void _onDragUpdate(Offset globalPosition) {
     setState(() {
       _dragPosition = globalPosition;
-      // Show rack gap when not hovering over the board
-      final boardBox = _boardKey.currentContext?.findRenderObject() as RenderBox?;
-      bool overBoard = false;
-      if (boardBox != null) {
-        final local = boardBox.globalToLocal(globalPosition);
-        final s = boardBox.size.width;
-        overBoard = local.dx >= 0 && local.dx < s && local.dy >= 0 && local.dy < s;
-      }
-      _rackHoverIndex = overBoard ? null : _rackInsertIndex(globalPosition);
+      _rackHoverIndex = _isOverRack(globalPosition) ? _rackInsertIndex(globalPosition) : null;
     });
   }
 
