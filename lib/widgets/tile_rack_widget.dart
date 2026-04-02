@@ -4,23 +4,34 @@ import '../models/tile.dart';
 class TileRackWidget extends StatelessWidget {
   final List<Tile> tiles;
   final void Function(int index, Offset globalPosition)? onTileDragStart;
+  /// Index where a dragged tile would be inserted (shows a gap).
+  /// null means no drag is happening over the rack.
+  final int? hoverInsertIndex;
 
   const TileRackWidget({
     super.key,
     required this.tiles,
     this.onTileDragStart,
+    this.hoverInsertIndex,
   });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(tiles.length, (i) {
-        final tile = tiles[i];
+      children: List.generate(tiles.length + (hoverInsertIndex != null ? 1 : 0), (i) {
+        // Insert a gap at the hover position
+        if (hoverInsertIndex != null && i == hoverInsertIndex) {
+          return const SizedBox(width: 48, height: 44); // gap
+        }
+        // Adjust index for tiles after the gap
+        final tileIdx = hoverInsertIndex != null && i > hoverInsertIndex! ? i - 1 : i;
+        if (tileIdx >= tiles.length) return const SizedBox.shrink();
+        final tile = tiles[tileIdx];
         return GestureDetector(
           onPanStart: onTileDragStart == null
               ? null
-              : (details) => onTileDragStart!(i, details.globalPosition),
+              : (details) => onTileDragStart!(tileIdx, details.globalPosition),
           child: TileWidget(tile: tile),
         );
       }),

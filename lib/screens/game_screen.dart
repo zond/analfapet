@@ -171,14 +171,19 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
+  int? _rackHoverIndex;
+
   void _onDragUpdate(Offset globalPosition) {
     setState(() {
       _dragPosition = globalPosition;
+      // Compute hover index for rack gap preview
+      _rackHoverIndex = _isOverRack(globalPosition) ? _rackInsertIndex(globalPosition) : null;
     });
   }
 
   void _onDragEnd() {
     if (_dragTile == null) return;
+    _rackHoverIndex = null;
 
     final boardBox = _boardKey.currentContext?.findRenderObject() as RenderBox?;
     if (boardBox != null) {
@@ -246,6 +251,14 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   /// Calculate rack insert index from a global drop position.
+  bool _isOverRack(Offset globalPosition) {
+    final rackBox = _rackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (rackBox == null) return false;
+    final local = rackBox.globalToLocal(globalPosition);
+    return local.dx >= 0 && local.dx < rackBox.size.width &&
+           local.dy >= -20 && local.dy < rackBox.size.height + 20; // generous vertical tolerance
+  }
+
   int _rackInsertIndex(Offset globalPosition) {
     final rackBox = _rackKey.currentContext?.findRenderObject() as RenderBox?;
     if (rackBox == null) return _myRack.length;
@@ -751,6 +764,7 @@ class _GameScreenState extends State<GameScreen> {
                   key: _rackKey,
                   tiles: _myRack,
                   onTileDragStart: _onRackTileDragStart,
+                  hoverInsertIndex: _dragTile != null ? _rackHoverIndex : null,
                 ),
                 const SizedBox(height: 8),
                 Padding(
