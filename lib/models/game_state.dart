@@ -104,6 +104,7 @@ class GameState {
             }
           }
           bag.addAll(removed);
+          _shuffleBag(bag, prng);
           drawTiles(currentRack, removed.length);
         }
         consecutivePasses = 0;
