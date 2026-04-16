@@ -120,12 +120,18 @@ class _GameScreenState extends State<GameScreen> {
 
     // freshRack now has the tiles that should be visible in the rack.
     // Preserve the user's previous arrangement order.
+    // Include pending tiles in the previous order so they don't get lost.
     final previousOrder = _userRackOrder;
     if (previousOrder != null) {
+      final fullPreviousOrder = List<Tile>.from(previousOrder);
+      // Add back tiles that were in pending placements (they were removed
+      // from _userRackOrder during drag but are still "ours")
+      for (final p in stillValid) {
+        fullPreviousOrder.add(p.placedTile.tile);
+      }
       final remaining = List<Tile>.from(freshRack);
       final ordered = <Tile>[];
-      // Keep tiles from previous order that still exist
-      for (final tile in previousOrder) {
+      for (final tile in fullPreviousOrder) {
         final idx = remaining.indexWhere((t) => t == tile);
         if (idx >= 0) {
           ordered.add(remaining.removeAt(idx));
