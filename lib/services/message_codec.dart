@@ -10,8 +10,12 @@ import '../models/tile.dart';
 /// Type 0x01: Friend request
 ///   0x01 | uuid (1 byte len + bytes) | name (1 byte len + bytes)
 ///
-/// Type 0x02: Game state
-///   0x02
+/// Type 0x02 (legacy) and 0x03 (current): Game state
+///   Both share the same layout except 0x02 includes a per-placement
+///   `points` byte that is ignored on decode (points are derived from
+///   the letter via Tile.pointValues). 0x03 omits it.
+///
+///   type_byte
 ///   | gameId (1 byte len + bytes)
 ///   | seed (4 bytes, big-endian uint32)
 ///   | playerCount (1 byte)
@@ -28,7 +32,7 @@ import '../models/tile.dart';
 ///               | row (1 byte)
 ///               | col (1 byte)
 ///               | letter (1 byte len + UTF-8 bytes)
-///               | points (1 byte)
+///               | [points (1 byte) — only if message type is 0x02]
 ///               | isBlank (1 byte: 0 or 1)
 ///               | if isBlank: blankLetter (1 byte len + UTF-8 bytes)
 ///           | score (2 bytes, big-endian uint16)
@@ -37,7 +41,8 @@ import '../models/tile.dart';
 ///           | for each: letter (1 byte len + UTF-8 bytes)
 class MessageCodec {
   static const int typeFriend = 0x01;
-  static const int typeGame = 0x02;
+  static const int typeGameLegacy = 0x02;
+  static const int typeGame = 0x03;
 
   /// Encode a friend request to a base64 string.
   static String encodeFriendRequest(String uuid, String name) {
@@ -69,7 +74,6 @@ class MessageCodec {
           builder.addByte(p.row);
           builder.addByte(p.col);
           _writeString(builder, p.placedTile.tile.letter);
-          builder.addByte(p.placedTile.tile.points);
           final isBlank = p.placedTile.blankLetter != null;
           builder.addByte(isBlank ? 1 : 0);
           if (isBlank) {
@@ -106,7 +110,8 @@ class MessageCodec {
       return {'type': 'friend', 'uuid': uuid, 'name': name};
     }
 
-    if (type == typeGame) {
+    if (type == typeGame || type == typeGameLegacy) {
+      final isLegacy = type == typeGameLegacy;
       final gameId = reader.readString();
       final seed = reader.readUint32();
       final playerCount = reader.readByte();
@@ -128,7 +133,9 @@ class MessageCodec {
             final row = reader.readByte();
             final col = reader.readByte();
             final letter = reader.readString();
-            final points = reader.readByte();
+            if (isLegacy) {
+              reader.readByte(); // legacy points byte — ignored
+            }
             final isBlank = reader.readByte() == 1;
             String? blankLetter;
             if (isBlank) {
@@ -137,7 +144,10 @@ class MessageCodec {
             placements.add(TilePlacement(
               row,
               col,
-              PlacedTile(Tile(letter, points), blankLetter: blankLetter),
+              PlacedTile(
+                Tile(letter, Tile.pointValues[letter]!),
+                blankLetter: blankLetter,
+              ),
             ));
           }
           final score = reader.readUint16();

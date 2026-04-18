@@ -4,10 +4,12 @@ class Tile {
 
   const Tile(this.letter, this.points);
 
-  Map<String, dynamic> toJson() => {'letter': letter, 'points': points};
+  Map<String, dynamic> toJson() => {'letter': letter};
 
-  factory Tile.fromJson(Map<String, dynamic> json) =>
-      Tile(json['letter'] as String, json['points'] as int);
+  factory Tile.fromJson(Map<String, dynamic> json) {
+    final letter = json['letter'] as String;
+    return Tile(letter, pointValues[letter]!);
+  }
 
   @override
   bool operator ==(Object other) =>
