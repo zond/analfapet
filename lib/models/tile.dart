@@ -19,13 +19,14 @@ class Tile {
   @override
   String toString() => '$letter($points)';
 
-  // Swedish Wordfeud tile distribution and point values
+  // Point values derived from letter frequency in the Swedish wordlist
+  // (freq% ≈ 9.825 * exp(-0.467 * points), inverted and rounded).
   static const Map<String, int> pointValues = {
-    'A': 1, 'B': 3, 'C': 8, 'D': 1, 'E': 1, 'F': 3,
-    'G': 2, 'H': 3, 'I': 1, 'J': 7, 'K': 2, 'L': 1,
-    'M': 2, 'N': 1, 'O': 2, 'P': 4, 'R': 1, 'S': 1,
-    'T': 1, 'U': 4, 'V': 3, 'X': 8, 'Y': 7, 'Z': 10,
-    'Å': 4, 'Ä': 3, 'Ö': 4, '*': 0, // * = blank tile
+    'A': 1, 'B': 4, 'C': 6, 'D': 2, 'E': 1, 'F': 4,
+    'G': 2, 'H': 5, 'I': 1, 'J': 6, 'K': 2, 'L': 1,
+    'M': 3, 'N': 1, 'O': 2, 'P': 3, 'R': 1, 'S': 1,
+    'T': 1, 'U': 3, 'V': 4, 'X': 9, 'Y': 5, 'Z': 12,
+    'Å': 5, 'Ä': 4, 'Ö': 4, '*': 0, // * = blank tile
   };
 
   // Swedish Wordfeud tile counts
