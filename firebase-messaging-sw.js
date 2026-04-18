@@ -1,0 +1,132 @@
+// --- Offline caching ---
+const CACHE_NAME = 'analfapet-v1';
+
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((names) =>
+      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+    ).then(() => self.clients.claim()).then(() => {
+      // Notify all clients that a new version is active
+      self.clients.matchAll({type: 'window'}).then((clients) => {
+        clients.forEach((client) => client.postMessage({type: 'sw-updated'}));
+      });
+    })
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Don't cache API calls or Firebase requests
+  if (url.origin !== self.location.origin) return;
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    fetch(event.request).then((response) => {
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      }
+      return response;
+    }).catch(() => caches.match(event.request))
+  );
+});
+
+// --- Firebase Cloud Messaging ---
+importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyDdsNrnheLnhAe5fPJNkQo86f40DgBdg5I",
+  appId: "1:245672555479:web:01dd2824ac0ff9e94e9192",
+  messagingSenderId: "245672555479",
+  projectId: "fcm-switch",
+  authDomain: "fcm-switch.firebaseapp.com",
+  storageBucket: "fcm-switch.firebasestorage.app",
+});
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+  // Use the human-readable fields 't' (type) and 'n' (name) sent alongside binary data
+  const msgType = payload.data?.t || 'message';
+  const sender = payload.data?.n || 'Someone';
+
+  let title = 'Analfapet';
+  let body = 'New message';
+
+  switch (msgType) {
+    case 'friend':
+      title = 'Friend request';
+      body = `${sender} added you as a friend`;
+      break;
+    case 'invite':
+      title = 'Game invite';
+      body = `${sender} invited you to a game`;
+      break;
+    case 'move':
+      const turn = payload.data?.turn;
+      const action = payload.data?.a || 'played';
+      title = 'Analfapet';
+      if (action === 'resigned') {
+        body = `${sender} resigned`;
+      } else {
+        const actionText = action === 'swapped' ? 'swapped tiles' : action;
+        body = turn ? `${sender} ${actionText} — ${turn}'s turn` : `${sender} ${actionText}`;
+      }
+      break;
+    default:
+      title = 'Analfapet';
+      body = `Update from ${sender}`;
+      break;
+  }
+
+  // Use game ID as tag so notifications for the same game replace each other
+  const tag = payload.data?.g || msgType;
+
+  return self.registration.showNotification(title, {
+    body,
+    icon: 'icons/Icon-192.png',
+    tag,
+    renotify: true,
+    data: payload.data,
+  });
+});
+
+// When user clicks a notification, focus the tab and forward the data
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Try to focus an existing tab
+      for (const client of clientList) {
+        if (client.url.includes('analfapet') && 'focus' in client) {
+          client.focus();
+          // Forward the full data (including 'd' binary payload) so the app can process it
+          if (data) client.postMessage({ type: 'notification-click', data: data });
+          return;
+        }
+      }
+      // No existing tab — open a new one with data in the URL fragment
+      // Only pass the binary payload and metadata fields
+      if (clients.openWindow) {
+        let small = {};
+        if (data) {
+          const keep = ['d', 't', 'n'];
+          for (const k of keep) {
+            if (data[k] !== undefined) small[k] = data[k];
+          }
+        }
+        const encoded = encodeURIComponent(JSON.stringify(small));
+        return clients.openWindow('./#notification=' + encoded);
+      }
+    })
+  );
+});
+// build: 2026-04-18T21:21:26+00:00
