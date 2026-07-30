@@ -35,6 +35,9 @@
 </head>
 <body>
   <style>
+    /* Never let the browser claim touch gestures (scroll/overscroll) —
+       a claimed gesture cancels in-app tile drags. */
+    html, body { touch-action: none; overscroll-behavior: none; }
     body { margin: 0; background-color: #8B4513; }
     #loading {
       position: fixed; inset: 0; z-index: 9999;

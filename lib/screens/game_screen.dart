@@ -96,7 +96,6 @@ class _GameScreenState extends State<GameScreen> {
   void didUpdateWidget(covariant GameScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(widget.gameState, oldWidget.gameState)) {
-      _dragTile = null;
       _syncRackWithPending();
     }
   }
@@ -142,6 +141,19 @@ class _GameScreenState extends State<GameScreen> {
       _userRackOrder = ordered;
     } else {
       _userRackOrder = freshRack;
+    }
+
+    // A tile in the user's hand (mid-drag) is not in the rack either.
+    // Keep the drag alive across resyncs — an incoming message must not
+    // snatch the tile from under the user's finger. Abort the drag only
+    // if the fresh state no longer gives us that tile.
+    if (_dragTile != null) {
+      final dragIdx = _userRackOrder!.indexWhere((t) => t == _dragTile);
+      if (dragIdx >= 0) {
+        _userRackOrder!.removeAt(dragIdx);
+      } else {
+        _dragTile = null;
+      }
     }
 
     // Also update the GameState rack to match (for applyMove etc.)
@@ -227,7 +239,15 @@ class _GameScreenState extends State<GameScreen> {
     }
 
     // Not dropped on the board — return to rack at the right position
+    _returnDragTileToRack();
+  }
+
+  /// Return the tile in hand to the rack. Used for off-board drops and for
+  /// canceled pointers (e.g. the browser claiming the gesture on mobile web).
+  void _returnDragTileToRack() {
+    if (_dragTile == null) return;
     setState(() {
+      _rackHoverIndex = null;
       final insertAt = _rackInsertIndex(_dragPosition);
       _myRack.insert(insertAt, _dragTile!);
       _userRackOrder = List.from(_myRack);
@@ -703,6 +723,7 @@ class _GameScreenState extends State<GameScreen> {
     return Listener(
       onPointerMove: _dragTile != null ? (e) => _onDragUpdate(e.position) : null,
       onPointerUp: _dragTile != null ? (_) => _onDragEnd() : null,
+      onPointerCancel: _dragTile != null ? (_) => _returnDragTileToRack() : null,
       child: Stack(
         children: [
           Scaffold(

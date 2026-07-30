@@ -404,7 +404,12 @@ class RemoteGameController extends ChangeNotifier {
       }
     }
 
-    await _save(game);
+    // Only persist + notify when the message actually changed something.
+    // A no-op save still rebuilds every listening screen, which disrupts
+    // in-progress interaction (and used to eat mid-drag tiles).
+    if (anythingChanged) {
+      await _save(game);
+    }
 
     // Fix #3: Auto-reply with current state when we have more moves
     if (game.status == RemoteGameStatus.active && incomingMoves.length < game.moves.length) {
