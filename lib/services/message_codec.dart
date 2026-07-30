@@ -213,15 +213,22 @@ class MessageCodec {
   }
 
   /// Return a short human-readable type string for the service worker.
-  static String notificationType(RemoteGame game) {
+  ///
+  /// [senderId] is the UUID of whoever is broadcasting this snapshot. It matters
+  /// because every pre-start broadcast looks alike from the game state alone —
+  /// no moves, roster incomplete — so without it an acceptance in a 3+ player
+  /// game would notify everyone as a fresh invite.
+  static String notificationType(RemoteGame game, String senderId) {
     // Check if any player newly denied
     if (game.players.any((p) => p.denied)) return 'deny';
     // Check if game has moves
     if (game.moves.isNotEmpty) return 'move';
     // Check if all accepted
     if (game.allAccepted) return 'accept';
-    // Otherwise it's an invite
-    return 'invite';
+    // Pre-start: only the creator's own broadcast is an actual invite.
+    if (senderId == game.creatorId) return 'invite';
+    // Anyone else broadcasting pre-start just accepted an incomplete roster.
+    return 'joined';
   }
 }
 

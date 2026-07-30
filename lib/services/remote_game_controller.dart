@@ -117,7 +117,7 @@ class RemoteGameController extends ChangeNotifier {
   Future<void> sendGameState(String gameId) async {
     final game = _games.firstWhere((g) => g.gameId == gameId);
     final base64Data = MessageCodec.encodeGameState(game);
-    final notifType = MessageCodec.notificationType(game);
+    final notifType = MessageCodec.notificationType(game, myId);
 
     // Include whose turn it is for notification text
     String? turnName;
@@ -290,6 +290,7 @@ class RemoteGameController extends ChangeNotifier {
 
     // Track whether anything actually changed (Fix #15)
     bool anythingChanged = false;
+    bool someoneJoined = false;
     final wasActive = game.status == RemoteGameStatus.active;
 
     // If incoming has all-accepted players and game isn't active yet,
@@ -324,6 +325,7 @@ class RemoteGameController extends ChangeNotifier {
         } else if (incoming.accepted && !local.accepted) {
           anythingChanged = true;
           local.accepted = true;
+          if (incoming.uuid != myId) someoneJoined = true;
         }
       }
     }
@@ -450,6 +452,9 @@ class RemoteGameController extends ChangeNotifier {
     }
     if (game.status == RemoteGameStatus.active && !wasActive) {
       return '$senderName accepted the invite';
+    }
+    if (someoneJoined) {
+      return '$senderName joined the game';
     }
     return 'Game updated from $senderName';
   }

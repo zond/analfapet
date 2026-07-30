@@ -68,6 +68,14 @@ messaging.onBackgroundMessage((payload) => {
       title = 'Game invite';
       body = `${sender} invited you to a game`;
       break;
+    case 'joined':
+      title = 'Analfapet';
+      body = `${sender} joined the game`;
+      break;
+    case 'accept':
+      title = 'Analfapet';
+      body = `${sender} accepted — the game is on`;
+      break;
     case 'move':
       const turn = payload.data?.turn;
       const action = payload.data?.a || 'played';
