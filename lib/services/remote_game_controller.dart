@@ -71,14 +71,27 @@ class RemoteGameController extends ChangeNotifier {
     return accepted;
   }
 
-  /// Finalize the game: keep only accepted players, sort by UUID, activate.
+  /// Finalize the game: keep only accepted players, sort by UUID, activate,
+  /// and befriend every co-player.
   /// Idempotent — safe to call multiple times.
-  void _finalizeGame(RemoteGame game) {
+  Future<void> _finalizeGame(RemoteGame game) async {
     final sorted = _sortedAccepted(game);
     game.players
       ..clear()
       ..addAll(sorted);
     game.status = RemoteGameStatus.active;
+    await _befriendPlayers(game);
+  }
+
+  /// Add every co-player to the friends list. Existing friends are untouched
+  /// (keeping their locally chosen name). No friend request is sent — every
+  /// client runs this on its own copy of the game, so it's mutual by design.
+  Future<void> _befriendPlayers(RemoteGame game) async {
+    final friends = FriendsService();
+    for (final player in game.players) {
+      if (player.uuid == myId) continue;
+      await friends.add(Friend(id: player.uuid, name: player.name));
+    }
   }
 
   Future<void> _save(RemoteGame game) async {
@@ -176,7 +189,7 @@ class RemoteGameController extends ChangeNotifier {
     );
 
     if (game.allAccepted) {
-      _finalizeGame(game);
+      await _finalizeGame(game);
     }
 
     await _save(game);
@@ -191,7 +204,7 @@ class RemoteGameController extends ChangeNotifier {
     me.accepted = true;
     game.status = RemoteGameStatus.accepted;
     if (game.allAccepted) {
-      _finalizeGame(game);
+      await _finalizeGame(game);
     }
     await _save(game);
     await sendGameState(gameId);
@@ -265,7 +278,7 @@ class RemoteGameController extends ChangeNotifier {
 
       // Fix #8: If all accepted already, finalize before saving
       if (game.allAccepted) {
-        _finalizeGame(game);
+        await _finalizeGame(game);
       }
 
       await _save(game);
@@ -291,9 +304,8 @@ class RemoteGameController extends ChangeNotifier {
         // Adopt the incoming player list
         game.players
           ..clear()
-          ..addAll(incomingPlayers.where((p) => p.accepted));
-        game.players.sort((a, b) => a.uuid.compareTo(b.uuid));
-        game.status = RemoteGameStatus.active;
+          ..addAll(incomingPlayers);
+        await _finalizeGame(game);
         anythingChanged = true;
       }
     }
@@ -338,7 +350,7 @@ class RemoteGameController extends ChangeNotifier {
 
     // Check if all remaining players have accepted
     if (game.allAccepted && game.status != RemoteGameStatus.active) {
-      _finalizeGame(game);
+      await _finalizeGame(game);
       anythingChanged = true;
     }
 
