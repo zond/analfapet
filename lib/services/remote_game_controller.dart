@@ -100,6 +100,43 @@ class RemoteGameController extends ChangeNotifier {
     await load();
   }
 
+  // --- Inbox ---
+
+  DateTime? _lastInboxFetch;
+
+  /// Fetch pending messages from the server inbox and process them.
+  /// Throttled to once per 5 seconds.
+  Future<void> fetchInbox() async {
+    final now = DateTime.now();
+    if (_lastInboxFetch != null && now.difference(_lastInboxFetch!) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastInboxFetch = now;
+
+    final messages = await fcm.fetchInbox(myId, identity.secret);
+    if (messages.isEmpty) return;
+    print('[Inbox] Fetched ${messages.length} messages');
+    for (final data in messages) {
+      final base64Data = data['d'];
+      if (base64Data == null) continue;
+      try {
+        final decoded = MessageCodec.decode(base64Data);
+        final msgType = decoded['type'] as String;
+        print('[Inbox] Processing: $msgType');
+        if (msgType == 'friend') {
+          await FriendsService().add(Friend(
+            id: decoded['uuid'] as String,
+            name: decoded['name'] as String,
+          ));
+        } else if (msgType == 'game') {
+          await handleGameMessage(decoded);
+        }
+      } catch (e) {
+        print('[Inbox] Failed to process message: $e');
+      }
+    }
+  }
+
   // --- Serialized message handling (Fix #18) ---
 
   Future<void> _pending = Future.value();

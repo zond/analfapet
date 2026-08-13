@@ -30,6 +30,9 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
   void initState() {
     super.initState();
     ctrl.addListener(_onChanged);
+    // Pull any missed messages whenever this screen is opened — push may
+    // not have delivered them (notifications off, missed FCM, etc.).
+    ctrl.fetchInbox();
   }
 
   @override
@@ -156,6 +159,40 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
     );
   }
 
+  Widget _notificationBanner(String permission) {
+    return Container(
+      margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6D3410),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orangeAccent),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_off, color: Colors.orangeAccent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              permission == 'denied'
+                  ? 'Notifications are blocked — moves only arrive when you open the app. Enable notifications for this app in your phone settings.'
+                  : 'Notifications are off — moves only arrive when you open the app.',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+          if (permission == 'default')
+            TextButton(
+              onPressed: () async {
+                await ctrl.fcm.ensurePermission();
+                if (mounted) setState(() {});
+              },
+              child: const Text('Enable'),
+            ),
+        ],
+      ),
+    );
+  }
+
   String _gameSubtitle(RemoteGame game) {
     final names = game.players.map((p) => p.uuid == widget.myId ? 'You' : p.name).join(', ');
     return names;
@@ -242,6 +279,9 @@ class _RemoteGamesScreenState extends State<RemoteGamesScreen> {
       ),
       body: ListView(
         children: [
+          if (ctrl.fcm.notificationPermission == 'denied' ||
+              ctrl.fcm.notificationPermission == 'default')
+            _notificationBanner(ctrl.fcm.notificationPermission),
           if (invitations.isNotEmpty) ...[
             _sectionHeader('Invitations'),
             ...invitations.map((g) => _invitationTile(g)),

@@ -143,40 +143,9 @@ Future<void> _checkVersion() async {
   }
 }
 
-DateTime? _lastInboxFetch;
-
-Future<void> _fetchInbox() async {
-  final now = DateTime.now();
-  if (_lastInboxFetch != null && now.difference(_lastInboxFetch!) < const Duration(seconds: 5)) {
-    return;
-  }
-  _lastInboxFetch = now;
-
-  final messages = await fcmService.fetchInbox(
-    playerIdentity.uuid,
-    playerIdentity.secret,
-  );
-  if (messages.isEmpty) return;
-  print('[Inbox] Fetched ${messages.length} messages');
-  for (final data in messages) {
-    final base64Data = data['d'];
-    if (base64Data == null) continue;
-    try {
-      final decoded = MessageCodec.decode(base64Data);
-      final msgType = decoded['type'] as String;
-      print('[Inbox] Processing: $msgType');
-      if (msgType == 'friend') {
-        final uuid = decoded['uuid'] as String;
-        final name = decoded['name'] as String;
-        await FriendsService().add(Friend(id: uuid, name: name));
-      } else if (msgType == 'game') {
-        await remoteGameController.handleGameMessage(decoded);
-      }
-    } catch (e) {
-      print('[Inbox] Failed to process message: $e');
-    }
-  }
-}
+/// Fetch pending messages from the server inbox (logic + throttle live in
+/// the controller so screens can trigger it too).
+Future<void> _fetchInbox() => remoteGameController.fetchInbox();
 
 void _checkUrlFragment() {
   final hash = web.window.location.hash;

@@ -38,6 +38,16 @@ class FcmService {
     }
   }
 
+  /// Current browser notification permission: 'granted', 'denied', 'default',
+  /// or 'unsupported' when the Notification API is unavailable.
+  String get notificationPermission {
+    try {
+      return web.Notification.permission;
+    } catch (_) {
+      return 'unsupported';
+    }
+  }
+
   /// Request notification permission (should be called from a user gesture on iOS).
   /// Returns true if permission was granted and token was obtained.
   Future<bool> ensurePermission() async {

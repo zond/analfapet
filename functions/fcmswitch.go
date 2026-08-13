@@ -173,36 +173,45 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var player playerRecord
-	if err := dbClient.NewRef("players/" + req.TargetUUID + "/token").Get(ctx, &player.Token); err != nil {
+	if err := dbClient.NewRef("players/" + req.TargetUUID).Get(ctx, &player); err != nil {
 		http.Error(w, fmt.Sprintf("db read: %v", err), http.StatusInternalServerError)
 		return
 	}
-	if player.Token == "" {
+	if player.Token == "" && player.Secret == "" {
 		http.Error(w, "player not found", http.StatusNotFound)
 		return
 	}
 
-	// Send via FCM
-	_, err := msgClient.Send(ctx, &messaging.Message{
-		Token: player.Token,
-		Data:  req.Data,
-		Webpush: &messaging.WebpushConfig{
-			Headers: map[string]string{
-				"Urgency": "high",
+	// Push via FCM when we have a token. Push failure is not fatal: the
+	// inbox append below is the delivery guarantee, so a player with
+	// notifications disabled still gets the message by pull.
+	pushed := false
+	if player.Token != "" {
+		_, err := msgClient.Send(ctx, &messaging.Message{
+			Token: player.Token,
+			Data:  req.Data,
+			Webpush: &messaging.WebpushConfig{
+				Headers: map[string]string{
+					"Urgency": "high",
+				},
 			},
-		},
-	})
-	if err != nil {
-		if messaging.IsRegistrationTokenNotRegistered(err) {
-			dbClient.NewRef("players/" + req.TargetUUID).Delete(ctx)
-			http.Error(w, "player token expired", http.StatusNotFound)
-			return
+		})
+		switch {
+		case err == nil:
+			pushed = true
+		case messaging.IsRegistrationTokenNotRegistered(err):
+			// Dead token (e.g. notifications disabled). Clear only the token —
+			// keep the secret and inbox so the player can keep pulling messages
+			// and re-register later without losing anything.
+			if derr := dbClient.NewRef("players/" + req.TargetUUID + "/token").Delete(ctx); derr != nil {
+				log.Printf("token clear failed for %s: %v", req.TargetUUID, derr)
+			}
+		default:
+			log.Printf("fcm send to %s failed: %v", req.TargetUUID, err)
 		}
-		http.Error(w, fmt.Sprintf("send: %v", err), http.StatusInternalServerError)
-		return
 	}
 
-	// Also append to inbox for pull-based retrieval
+	// Append to inbox for pull-based retrieval
 	inboxRef := dbClient.NewRef("inbox/" + req.TargetUUID)
 	now := time.Now().UnixMilli()
 	msg := inboxMessage{
@@ -210,7 +219,11 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 		Timestamp: now,
 	}
 	if _, err := inboxRef.Push(ctx, msg); err != nil {
-		// Non-fatal — FCM already sent
+		if !pushed {
+			// Neither channel delivered — surface the failure
+			http.Error(w, fmt.Sprintf("inbox append: %v", err), http.StatusInternalServerError)
+			return
+		}
 		log.Printf("inbox append failed for %s: %v", req.TargetUUID, err)
 	}
 
@@ -255,7 +268,7 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	json.NewEncoder(w).Encode(map[string]bool{"success": true, "pushed": pushed})
 }
 
 // handleInbox returns all pending messages for a player and clears the inbox.
