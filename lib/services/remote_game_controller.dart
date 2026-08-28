@@ -322,12 +322,34 @@ class RemoteGameController extends ChangeNotifier {
         status: RemoteGameStatus.invited,
       );
 
+      // Adopt the move history (validated from scratch, against the wire
+      // player order) so an established game we lost — e.g. after identity
+      // recovery — restores complete instead of with an empty board.
+      if (incomingMoves.isNotEmpty) {
+        bool allValid = true;
+        for (final move in incomingMoves) {
+          final error = _validateMove(game, move);
+          if (error != null) {
+            print('[Game] Rejected restored move ${move.turnSeqNr}: $error');
+            allValid = false;
+            break;
+          }
+          game.moves.add(move);
+        }
+        if (!allValid) {
+          game.moves.clear();
+        }
+      }
+
       // Fix #8: If all accepted already, finalize before saving
       if (game.allAccepted) {
         await _finalizeGame(game);
       }
 
       await _save(game);
+      if (game.moves.isNotEmpty) {
+        return 'Game with $senderName restored';
+      }
       return '$senderName invites you to a game';
     }
 
