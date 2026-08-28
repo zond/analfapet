@@ -36,4 +36,19 @@ class PlayerIdentity {
     await prefs.setString(key, id);
     return id;
   }
+
+  /// Overwrite the stored identity (identity restore / recovery).
+  /// The app must be reloaded afterwards — uuid/secret are late final.
+  static Future<void> overwrite({
+    required String uuid,
+    required String secret,
+    String? name,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_uuidKey, uuid);
+    await prefs.setString(_secretKey, secret);
+    if (name != null && name.isNotEmpty) {
+      await prefs.setString(_nameKey, name);
+    }
+  }
 }

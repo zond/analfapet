@@ -8,7 +8,7 @@ RUNTIME=go126
 # Compute hash of all Go source + go.mod (the deployable code)
 LOCAL_HASH="h$(cat *.go go.mod | sha256sum | cut -c1-16)"
 
-for FUNC in Register Send Inbox; do
+for FUNC in Register Send Inbox Recover; do
   # Get the hash label from the deployed function
   DEPLOYED_HASH=$(gcloud functions describe "$FUNC" \
     --region="$REGION" --project="$PROJECT" \

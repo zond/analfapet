@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:web/web.dart' as web;
+import '../services/admin_service.dart';
 import '../services/fcm_service.dart';
 import '../services/friends_service.dart';
 import '../services/player_identity.dart';
@@ -240,6 +242,192 @@ class _FriendsScreenState extends State<FriendsScreen> {
     );
   }
 
+  // --- Identity export / import / recovery ---
+
+  void _exportIdentity() {
+    final data = jsonEncode({
+      'id': _identity.uuid,
+      'name': _identity.name,
+      'secret': _identity.secret,
+    });
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Export identity'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 200,
+              height: 200,
+              child: QrImageView(
+                data: data,
+                version: QrVersions.auto,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Scan or paste this on another device to become this player. '
+              'Anyone with this code can be you — store it somewhere safe '
+              '(e.g. a password manager).',
+              style: TextStyle(fontSize: 12, color: Colors.orangeAccent),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: data));
+              showToast('Identity copied');
+            },
+            child: const Text('Copy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importIdentity() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import identity'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Paste identity code'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final scanned = await Navigator.push<String>(
+                context,
+                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+              );
+              if (scanned != null && context.mounted) {
+                Navigator.pop(context, scanned);
+              }
+            },
+            child: const Text('Scan QR'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty || !mounted) return;
+    await _applyIdentity(result);
+  }
+
+  Future<void> _applyIdentity(String jsonStr) async {
+    String? id, secret, name;
+    try {
+      final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+      id = parsed['id'] as String?;
+      secret = parsed['secret'] as String?;
+      name = parsed['name'] as String?;
+    } catch (_) {}
+    if (id == null || id.isEmpty || secret == null || secret.isEmpty) {
+      showToast('Not an identity code');
+      return;
+    }
+    if (id == _identity.uuid) {
+      showToast('Already this identity');
+      return;
+    }
+    await _switchIdentity(id, secret, name);
+  }
+
+  /// Confirm, overwrite the stored identity, and reload the app as it.
+  Future<void> _switchIdentity(String uuid, String secret, String? name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Switch identity?'),
+        content: Text(
+          'This device will become player\n$uuid\n\n'
+          'Games and friends tied to the current identity will be orphaned. '
+          'The app will reload.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Switch', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await PlayerIdentity.overwrite(uuid: uuid, secret: secret, name: name);
+    web.window.location.reload();
+  }
+
+  /// Hidden admin flow (long-press on your name): Google sign-in, then
+  /// fetch the secret of an old player ID from the server and re-assume it.
+  /// The server only honors allowlisted Google accounts.
+  Future<void> _adminRecoverIdentity() async {
+    final String idToken;
+    try {
+      idToken = await AdminService.googleSignIn();
+    } catch (e) {
+      print('[Admin] Sign-in failed: $e');
+      showToast('Google sign-in failed');
+      return;
+    }
+    if (!mounted) return;
+
+    final uuidController = TextEditingController();
+    final uuid = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Recover identity'),
+        content: TextField(
+          controller: uuidController,
+          decoration: const InputDecoration(labelText: 'Old player ID (UUID)'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, uuidController.text.trim()),
+            child: const Text('Recover'),
+          ),
+        ],
+      ),
+    );
+    if (uuid == null || uuid.isEmpty || !mounted) return;
+
+    final String secret;
+    try {
+      secret = await AdminService.recoverSecret(uuid, idToken);
+    } catch (e) {
+      print('[Admin] Recover failed: $e');
+      showToast('Recovery failed');
+      return;
+    }
+    if (!mounted) return;
+    await _switchIdentity(uuid, secret, _identity.name);
+  }
+
   void _removeFriend(Friend friend) {
     showDialog(
       context: context,
@@ -274,7 +462,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(title),
+            GestureDetector(
+              onLongPress: _adminRecoverIdentity,
+              child: Text(title),
+            ),
             const SizedBox(width: 4),
             GestureDetector(
               onTap: _editName,
@@ -289,6 +480,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
             onPressed: _showMyQR,
             icon: const Icon(Icons.qr_code),
             tooltip: 'My QR code',
+          ),
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              if (v == 'export') _exportIdentity();
+              if (v == 'import') _importIdentity();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'export', child: Text('Export identity')),
+              PopupMenuItem(value: 'import', child: Text('Import identity')),
+            ],
           ),
         ],
       ),

@@ -75,10 +75,19 @@ class RemoteGameController extends ChangeNotifier {
   /// and befriend every co-player.
   /// Idempotent — safe to call multiple times.
   Future<void> _finalizeGame(RemoteGame game) async {
-    final sorted = _sortedAccepted(game);
-    game.players
-      ..clear()
-      ..addAll(sorted);
+    if (game.moves.isEmpty) {
+      // Sorting by UUID gives every client the same deterministic player
+      // order at activation.
+      final sorted = _sortedAccepted(game);
+      game.players
+        ..clear()
+        ..addAll(sorted);
+    } else {
+      // Once moves exist the order is settled — the move history is bound
+      // to player indices — so an established game arriving from another
+      // device (e.g. identity recovery, transfer) keeps its wire order.
+      game.players.removeWhere((p) => !p.accepted);
+    }
     game.status = RemoteGameStatus.active;
     await _befriendPlayers(game);
   }

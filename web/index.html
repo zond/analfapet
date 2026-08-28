@@ -81,6 +81,7 @@
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script>
     firebase.initializeApp({
       apiKey: "AIzaSyDdsNrnheLnhAe5fPJNkQo86f40DgBdg5I",
@@ -102,6 +103,13 @@
         window._analfapetOnMessage(JSON.stringify(payload.data));
       }
     });
+    // Google sign-in for admin features; resolves to a Firebase ID token.
+    window._analfapetGoogleSignIn = function() {
+      var provider = new firebase.auth.GoogleAuthProvider();
+      return firebase.auth().signInWithPopup(provider).then(function(result) {
+        return result.user.getIdToken();
+      });
+    };
     window._analfapetHasBarcodeDetector = function() {
       return true; // always available via canvas fallback
     };

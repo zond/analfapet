@@ -12,6 +12,7 @@ import (
 	"time"
 
 	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/auth"
 	"firebase.google.com/go/v4/db"
 	"firebase.google.com/go/v4/messaging"
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
@@ -25,10 +26,16 @@ const (
 )
 
 var (
-	dbClient  *db.Client
-	msgClient *messaging.Client
-	once      sync.Once
+	dbClient   *db.Client
+	msgClient  *messaging.Client
+	authClient *auth.Client
+	once       sync.Once
 )
+
+// Google accounts allowed to use admin endpoints (verified email required).
+var adminEmails = map[string]bool{
+	"zondolfin@gmail.com": true,
+}
 
 func initClients() {
 	once.Do(func() {
@@ -44,6 +51,10 @@ func initClients() {
 		msgClient, err = app.Messaging(ctx)
 		if err != nil {
 			log.Fatalf("app.Messaging: %v", err)
+		}
+		authClient, err = app.Auth(ctx)
+		if err != nil {
+			log.Fatalf("app.Auth: %v", err)
 		}
 	})
 }
@@ -89,6 +100,70 @@ func init() {
 	functions.HTTP("Register", handleRegister)
 	functions.HTTP("Send", handleSend)
 	functions.HTTP("Inbox", handleInbox)
+	functions.HTTP("Recover", handleRecover)
+}
+
+type recoverRequest struct {
+	UUID    string `json:"uuid"`
+	IDToken string `json:"idToken"`
+}
+
+// handleRecover returns the stored secret for a player, so the operator can
+// re-assume an identity whose local copy was lost. Admin-only: requires a
+// Google-signed Firebase ID token whose verified email is on the allowlist.
+func handleRecover(w http.ResponseWriter, r *http.Request) {
+	if cors(w, r) {
+		return
+	}
+	initClients()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req recoverRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.UUID == "" || req.IDToken == "" {
+		http.Error(w, "uuid and idToken are required", http.StatusBadRequest)
+		return
+	}
+	if !uuidRegex.MatchString(req.UUID) {
+		http.Error(w, "invalid uuid format", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	tok, err := authClient.VerifyIDToken(ctx, req.IDToken)
+	if err != nil {
+		http.Error(w, "invalid ID token", http.StatusUnauthorized)
+		return
+	}
+	email, _ := tok.Claims["email"].(string)
+	verified, _ := tok.Claims["email_verified"].(bool)
+	if !verified || !adminEmails[email] {
+		log.Printf("recover denied for %q (verified=%v)", email, verified)
+		http.Error(w, "not authorized", http.StatusForbidden)
+		return
+	}
+
+	var player playerRecord
+	if err := dbClient.NewRef("players/" + req.UUID).Get(ctx, &player); err != nil {
+		http.Error(w, fmt.Sprintf("db read: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if player.Secret == "" {
+		http.Error(w, "player not found", http.StatusNotFound)
+		return
+	}
+
+	log.Printf("identity %s recovered by %s", req.UUID, email)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"uuid": req.UUID, "secret": player.Secret})
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
